@@ -31,11 +31,27 @@ export function App() {
   }, [jwt]);
 
   if (authError) {
+    const w = window as unknown as {
+      Telegram?: { WebApp?: { initData?: string; version?: string; platform?: string } };
+    };
+    const debug = {
+      hasWindowTelegram: Boolean(w.Telegram),
+      hasWebApp: Boolean(w.Telegram?.WebApp),
+      initDataLen: (w.Telegram?.WebApp?.initData ?? "").length,
+      version: w.Telegram?.WebApp?.version ?? null,
+      platform: w.Telegram?.WebApp?.platform ?? null,
+      href: window.location.href,
+      hashLen: window.location.hash.length,
+      hashHead: window.location.hash.slice(0, 80),
+    };
     return (
       <div className="min-h-full flex items-center justify-center p-6 text-center">
-        <div className="max-w-sm">
+        <div className="max-w-sm w-full">
           <h2 className="text-lg font-semibold text-red-600">Authentication failed</h2>
           <p className="mt-2 text-sm text-slate-600">{authError}</p>
+          <pre className="mt-4 text-left text-xs bg-slate-100 rounded p-3 overflow-auto whitespace-pre-wrap break-all">
+            {JSON.stringify(debug, null, 2)}
+          </pre>
         </div>
       </div>
     );

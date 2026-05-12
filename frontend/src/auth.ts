@@ -1,5 +1,5 @@
 import { api } from "./api";
-import { getInitData } from "./telegram";
+import { getInitData, getTelegramWebApp } from "./telegram";
 import { useAppStore } from "./store";
 
 const TOKEN_KEY = "kovanoff.jwt";
@@ -21,11 +21,28 @@ export function persistToken(token: string | null): void {
   }
 }
 
+/** Telegram WebView can expose WebApp before initData is populated. */
+async function waitForInitData(maxMs = 2500, stepMs = 50): Promise<string> {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const v = getInitData();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, stepMs));
+  }
+  return "";
+}
+
 export async function login(): Promise<void> {
-  const initData = getInitData();
+  let initData = getInitData();
   if (!initData) {
+    initData = await waitForInitData();
+  }
+  if (!initData) {
+    const hasStub = Boolean(getTelegramWebApp());
     useAppStore.getState().setAuthError(
-      "Open this app inside Telegram (no initData detected).",
+      hasStub
+        ? 'Open only via the bot "Open Calls" Web App button (not a plain URL or "Open in browser"). Telegram did not pass initData.'
+        : "Open this app inside Telegram (no initData detected).",
     );
     return;
   }
