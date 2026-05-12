@@ -28,5 +28,3 @@ Thumbs.db
 # Data
 postgres-data/
 redis-data/
-
-/backend/alembic/versions/*
