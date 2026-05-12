@@ -72,7 +72,6 @@ services:
     network_mode: host
     command:
       - -n
-      - --no-cli
       - --no-tls
       - --no-dtls
       - --log-file=stdout
@@ -83,7 +82,6 @@ services:
       - --lt-cred-mech
       - --user=${TURN_USERNAME}:${TURN_PASSWORD}
       - --no-multicast-peers
-      - --no-loopback-peers
       - --fingerprint
 
   caddy:
