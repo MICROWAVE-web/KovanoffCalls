@@ -24,11 +24,20 @@ class WebSocketManager:
             self._connections[user_id] = websocket
         return previous
 
-    async def disconnect(self, user_id: int, websocket: WebSocket) -> None:
+    async def disconnect(self, user_id: int, websocket: WebSocket) -> bool:
+        """Remove the connection if it is still the active one for this user.
+
+        Returns True if this websocket was the active one (and therefore the
+        caller should run user-level cleanup such as presence/active-call
+        teardown). Returns False if a newer connection has already replaced
+        this one — in that case the caller MUST NOT touch shared user state.
+        """
         async with self._lock:
             current = self._connections.get(user_id)
             if current is websocket:
                 self._connections.pop(user_id, None)
+                return True
+            return False
 
     def is_connected(self, user_id: int) -> bool:
         return user_id in self._connections

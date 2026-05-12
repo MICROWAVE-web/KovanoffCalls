@@ -404,7 +404,16 @@ async def signaling_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
         logger.exception("signaling error for user %s: %s", user.id, exc)
     finally:
         refresher.cancel()
-        await manager.disconnect(user.id, websocket)
-        await presence.mark_offline(user.id)
-        await _cleanup_user_calls(user.id)
-        await _broadcast_presence(user, online=False)
+        was_active = await manager.disconnect(user.id, websocket)
+        if was_active:
+            # We were the user's current connection — do the real teardown.
+            await presence.mark_offline(user.id)
+            await _cleanup_user_calls(user.id)
+            await _broadcast_presence(user, online=False)
+        else:
+            # A newer WS replaced us (reconnect). Do nothing — the new
+            # connection owns the user's presence and active calls.
+            logger.info(
+                "WS for user %s superseded by newer connection; skipping cleanup",
+                user.id,
+            )
