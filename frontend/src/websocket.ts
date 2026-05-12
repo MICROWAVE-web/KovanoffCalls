@@ -7,6 +7,10 @@ const HEARTBEAT_INTERVAL = 25_000;
 const RECONNECT_BASE_DELAY = 1_000;
 const RECONNECT_MAX_DELAY = 15_000;
 
+// 1000 = normal closure (server told us to go away on purpose; don't reconnect).
+// 1008 = policy violation (auth rejected; reconnecting won't help).
+const NO_RECONNECT_CODES = new Set<number>([1000, 1008]);
+
 export class SignalingClient {
   private ws: WebSocket | null = null;
   private token: string | null = null;
@@ -21,6 +25,12 @@ export class SignalingClient {
   connect(token: string): void {
     this.token = token;
     this.shouldReconnect = true;
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      return;
+    }
+    if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+      return;
+    }
     this.openSocket();
   }
 
@@ -31,13 +41,14 @@ export class SignalingClient {
       this.reconnectTimer = null;
     }
     this.stopHeartbeat();
-    if (this.ws) {
+    const ws = this.ws;
+    this.ws = null;
+    if (ws) {
       try {
-        this.ws.close();
+        ws.close(1000, "client disconnect");
       } catch {
         // ignore
       }
-      this.ws = null;
     }
     this.emitConnected(false);
   }
@@ -62,11 +73,19 @@ export class SignalingClient {
 
   private openSocket(): void {
     if (!this.token) return;
+    if (this.ws) {
+      try {
+        this.ws.close(1000, "superseded by new socket");
+      } catch {
+        // ignore
+      }
+    }
     const url = `${WS_BASE}/ws?token=${encodeURIComponent(this.token)}`;
     const ws = new WebSocket(url);
     this.ws = ws;
 
     ws.onopen = () => {
+      if (this.ws !== ws) return;
       this.reconnectAttempt = 0;
       this.emitConnected(true);
       this.flushOutbox();
@@ -74,6 +93,7 @@ export class SignalingClient {
     };
 
     ws.onmessage = (event) => {
+      if (this.ws !== ws) return;
       let parsed: SignalingIncoming;
       try {
         parsed = JSON.parse(event.data) as SignalingIncoming;
@@ -89,13 +109,15 @@ export class SignalingClient {
       });
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      // If a newer socket has already replaced us, just exit quietly.
+      if (this.ws !== ws) return;
       this.stopHeartbeat();
       this.ws = null;
       this.emitConnected(false);
-      if (this.shouldReconnect) {
-        this.scheduleReconnect();
-      }
+      if (!this.shouldReconnect) return;
+      if (NO_RECONNECT_CODES.has(event.code)) return;
+      this.scheduleReconnect();
     };
 
     ws.onerror = () => {
@@ -126,6 +148,7 @@ export class SignalingClient {
   }
 
   private scheduleReconnect(): void {
+    if (this.reconnectTimer !== null) return;
     this.reconnectAttempt += 1;
     const delay = Math.min(
       RECONNECT_MAX_DELAY,
