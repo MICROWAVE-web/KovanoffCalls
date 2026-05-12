@@ -1,8 +1,25 @@
 import { signaling } from "./websocket";
 import { useAppStore } from "./store";
 
+function buildIceServers(): RTCIceServer[] {
+  const servers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+
+  const turnUrl = import.meta.env.VITE_TURN_URL;
+  const turnUser = import.meta.env.VITE_TURN_USERNAME;
+  const turnPass = import.meta.env.VITE_TURN_PASSWORD;
+  if (turnUrl && turnUser && turnPass) {
+    servers.push({
+      urls: [`${turnUrl}?transport=udp`, `${turnUrl}?transport=tcp`],
+      username: turnUser,
+      credential: turnPass,
+    });
+  }
+
+  return servers;
+}
+
 const PC_CONFIG: RTCConfiguration = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  iceServers: buildIceServers(),
 };
 
 export class CallSession {
