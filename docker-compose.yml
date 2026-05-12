@@ -13,8 +13,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    ports:
-      - "5432:5432"
 
   redis:
     image: redis:7-alpine
@@ -24,8 +22,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    ports:
-      - "6379:6379"
     volumes:
       - redis-data:/data
 
@@ -43,8 +39,6 @@ services:
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    ports:
-      - "8000:8000"
 
   bot:
     build:
@@ -67,10 +61,24 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    ports:
-      - "5173:5173"
     command: npm run dev -- --host 0.0.0.0 --port 5173
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - frontend
 
 volumes:
   postgres-data:
   redis-data:
+  caddy-data:
+  caddy-config:
