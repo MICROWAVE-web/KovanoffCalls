@@ -36,7 +36,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
   bot:
     build:
@@ -56,10 +58,10 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_WS_BASE_URL: ${VITE_WS_BASE_URL}
     restart: unless-stopped
-    env_file:
-      - .env
-    command: npm run dev -- --host 0.0.0.0 --port 5173
 
   caddy:
     image: caddy:2-alpine

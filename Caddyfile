@@ -7,6 +7,6 @@ kovanoffcalls.maptap.ru {
     }
 
     handle {
-        reverse_proxy frontend:5173
+        reverse_proxy frontend:80
     }
 }
