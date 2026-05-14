@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createLoopingRingtone } from "../ringtone";
 import { useAppStore } from "../store";
 import { Controls } from "./Controls";
 
@@ -27,6 +28,15 @@ export function CallScreen() {
 
   const localRef = useRef<HTMLVideoElement | null>(null);
   const remoteRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (!activeCall || activeCall.role !== "caller" || activeCall.status !== "ringing") {
+      return undefined;
+    }
+    const ring = createLoopingRingtone();
+    ring.play();
+    return () => ring.stop();
+  }, [activeCall?.callId, activeCall?.role, activeCall?.status]);
 
   useEffect(() => {
     if (localRef.current && localStream) {

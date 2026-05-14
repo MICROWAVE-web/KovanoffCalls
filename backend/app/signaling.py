@@ -122,6 +122,23 @@ class CallSessionRegistry:
 sessions = CallSessionRegistry()
 
 
+async def _replay_pending_incoming_for_callee(ws: WebSocket, callee_id: int) -> None:
+    async with SessionLocal() as session:
+        call = await calls_service.get_latest_pending_incoming_for_callee(session, callee_id)
+        if call is None:
+            return
+        caller = call.caller
+        invite_payload = {
+            "type": "incoming_call",
+            "call_id": str(call.id),
+            "caller": UserPublic.from_model(caller).model_dump(),
+        }
+    try:
+        await ws.send_json(invite_payload)
+    except Exception:
+        logger.exception("failed to replay pending incoming_call for user %s", callee_id)
+
+
 async def _handle_call_invite(
     user: User,
     payload: dict[str, Any],
@@ -374,6 +391,7 @@ async def signaling_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
     await websocket.send_json(
         {"type": "hello", "user": UserPublic.from_model(user).model_dump()}
     )
+    await _replay_pending_incoming_for_callee(websocket, user.id)
     await _broadcast_presence(user, online=True)
 
     try:

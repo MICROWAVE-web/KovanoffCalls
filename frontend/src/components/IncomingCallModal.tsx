@@ -1,8 +1,18 @@
-import { useAppStore } from "../store";
+import { useEffect } from "react";
 import { acceptIncomingCall, declineIncomingCall } from "../callFlow";
+import { createLoopingRingtone } from "../ringtone";
+import { useAppStore } from "../store";
 
 export function IncomingCallModal() {
   const incoming = useAppStore((s) => s.incomingCall);
+
+  useEffect(() => {
+    if (!incoming) return undefined;
+    const ring = createLoopingRingtone();
+    ring.play();
+    return () => ring.stop();
+  }, [incoming?.callId]);
+
   if (!incoming) return null;
 
   const { caller } = incoming;

@@ -28,6 +28,19 @@ async def get_call(session: AsyncSession, call_id: uuid.UUID) -> Call | None:
     return await session.scalar(select(Call).where(Call.id == call_id))
 
 
+async def get_latest_pending_incoming_for_callee(
+    session: AsyncSession, callee_id: int
+) -> Call | None:
+    """Most recent pending call where this user is the callee (e.g. missed WS delivery)."""
+    stmt = (
+        select(Call)
+        .where(Call.callee_id == callee_id, Call.status == CallStatus.pending)
+        .order_by(Call.created_at.desc())
+        .limit(1)
+    )
+    return await session.scalar(stmt)
+
+
 async def mark_active(session: AsyncSession, call: Call) -> Call:
     call.status = CallStatus.active
     call.started_at = datetime.now(timezone.utc)
