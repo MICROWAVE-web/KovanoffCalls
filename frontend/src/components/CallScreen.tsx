@@ -56,9 +56,9 @@ export function CallScreen() {
 
   const statusLabel =
     activeCall.status === "ringing"
-      ? "Ringing…"
+      ? "Звонит…"
       : activeCall.status === "connecting"
-        ? "Connecting…"
+        ? "Подключение…"
         : activeCall.status === "active"
           ? timer
           : "";

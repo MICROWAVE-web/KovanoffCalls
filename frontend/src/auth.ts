@@ -53,8 +53,8 @@ export async function login(): Promise<void> {
       const hasStub = Boolean(getTelegramWebApp());
       useAppStore.getState().setAuthError(
         hasStub
-          ? 'Open only via the bot "Open Calls" Web App button (not a plain URL or "Open in browser"). Telegram did not pass initData.'
-          : "Open this app inside Telegram (no initData detected).",
+          ? 'Открывайте только через кнопку мини-приложения «Открыть звонки» в боте (не по обычной ссылке и не «Открыть в браузере»). Telegram не передал initData.'
+          : "Откройте это приложение внутри Telegram (initData не обнаружен).",
       );
       return;
     }
@@ -62,7 +62,7 @@ export async function login(): Promise<void> {
     persistToken(access_token);
     useAppStore.getState().setAuth(access_token, user);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Authentication failed";
+    const message = err instanceof Error ? err.message : "Ошибка аутентификации";
     useAppStore.getState().setAuthError(message);
   } finally {
     useAppStore.getState().setAuthLoading(false);

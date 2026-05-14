@@ -61,7 +61,7 @@ export function App() {
     return (
       <div className="min-h-full flex items-center justify-center p-6 text-center bg-slate-50 dark:bg-slate-950">
         <div className="max-w-sm w-full">
-          <h2 className="text-lg font-semibold text-red-600 dark:text-red-400">Authentication failed</h2>
+          <h2 className="text-lg font-semibold text-red-600 dark:text-red-400">Ошибка входа</h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{authError}</p>
           <PressableButton
             type="button"
@@ -69,7 +69,7 @@ export function App() {
             disabled={authLoading}
             onClick={() => void retryAuth()}
           >
-            Retry
+            Повторить
           </PressableButton>
           <pre className="mt-4 text-left text-xs bg-slate-100 dark:bg-slate-900 dark:text-slate-300 rounded p-3 overflow-auto whitespace-pre-wrap break-all border border-slate-200 dark:border-slate-800">
             {JSON.stringify(debug, null, 2)}
@@ -82,7 +82,7 @@ export function App() {
   if (!user || authLoading) {
     return (
       <div className="min-h-full flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="text-slate-500 dark:text-slate-400">Loading…</div>
+        <div className="text-slate-500 dark:text-slate-400">Загрузка…</div>
       </div>
     );
   }

@@ -73,7 +73,7 @@ export function UserList() {
   const openAddContacts = () => {
     if (!botUsername) {
       window.alert(
-        "Bot username is not configured (BOT_USERNAME / VITE_TELEGRAM_BOT_USERNAME). Ask the admin to set it.",
+        "Имя бота не настроено (BOT_USERNAME / VITE_TELEGRAM_BOT_USERNAME). Попросите администратора задать его.",
       );
       return;
     }
@@ -82,12 +82,12 @@ export function UserList() {
 
   const inviteToRegister = (peer: ExternalPeer) => {
     if (!botUsername) {
-      window.alert("Bot username is not configured.");
+      window.alert("Имя бота не настроено.");
       return;
     }
     const botUrl = `https://t.me/${botUsername}`;
     const text = encodeURIComponent(
-      `${peer.name} — join me on Kovanoff Calls: open this bot and tap “Open Calls”.`,
+      `${peer.name} — присоединяйся к Kovanoff Звонки: открой этого бота и нажми «Открыть звонки».`,
     );
     const url = encodeURIComponent(botUrl);
     openTelegramLink(`https://t.me/share/url?url=${url}&text=${text}`);
@@ -98,9 +98,9 @@ export function UserList() {
   return (
     <div className="min-h-full bg-slate-50 dark:bg-slate-950">
       <header className="px-5 pt-6 pb-3">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">People</h1>
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Люди</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          {wsConnected ? "Connected" : "Connecting…"} · {totalOthers} in directory
+          {wsConnected ? "Подключено" : "Подключение…"} · {totalOthers} в списке
         </p>
         <div className="flex flex-wrap gap-2 mt-3">
           <PressableButton
@@ -108,14 +108,14 @@ export function UserList() {
             onClick={() => void refreshDirectory()}
             className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm"
           >
-            Refresh
+            Обновить
           </PressableButton>
           <PressableButton
             type="button"
             onClick={openAddContacts}
             className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white shadow-sm active:bg-brand-dark"
           >
-            Add from Telegram
+            Добавить из Telegram
           </PressableButton>
         </div>
       </header>
@@ -123,12 +123,12 @@ export function UserList() {
       <div className="px-4 pb-24 space-y-6">
         <section>
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
-            Online ({online.length})
+            Онлайн ({online.length})
           </h2>
           <div className="space-y-2">
             {online.length === 0 ? (
               <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border border-slate-100 dark:border-slate-800 p-4 text-center text-slate-500 dark:text-slate-400 text-sm">
-                No one else is online.
+                Никого больше нет в сети.
               </div>
             ) : (
               online.map((user) => (
@@ -139,14 +139,14 @@ export function UserList() {
                   <UserAvatar user={user} />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-slate-900 dark:text-slate-100 truncate">{user.name}</div>
-                    <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">online</div>
+                    <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">в сети</div>
                   </div>
                   <PressableButton
                     type="button"
                     onClick={() => void placeCall(user.id)}
                     className="rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white shadow-sm active:bg-brand-dark"
                   >
-                    Call
+                    Позвонить
                   </PressableButton>
                 </div>
               ))
@@ -156,12 +156,12 @@ export function UserList() {
 
         <section>
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
-            Registered, offline ({offline.length})
+            Зарегистрированы, не в сети ({offline.length})
           </h2>
           <div className="space-y-2">
             {offline.length === 0 ? (
               <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border border-slate-100 dark:border-slate-800 p-4 text-center text-slate-500 dark:text-slate-400 text-sm">
-                No registered users are offline.
+                Нет зарегистрированных пользователей вне сети.
               </div>
             ) : (
               offline.map((user) => (
@@ -172,14 +172,14 @@ export function UserList() {
                   <UserAvatar user={user} />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-slate-900 dark:text-slate-100 truncate">{user.name}</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">offline</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">не в сети</div>
                   </div>
                   <PressableButton
                     type="button"
                     onClick={() => void placeCall(user.id)}
                     className="rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white shadow-sm active:bg-brand-dark"
                   >
-                    Call
+                    Позвонить
                   </PressableButton>
                 </div>
               ))
@@ -189,15 +189,15 @@ export function UserList() {
 
         <section>
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
-            Not in app ({external.length})
+            Нет в приложении ({external.length})
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-            People you shared via the bot. They are not registered in Calls yet.
+            Люди, которых вы добавили через бота. Они ещё не зарегистрированы в Звонках.
           </p>
           <div className="space-y-2">
             {external.length === 0 ? (
               <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border border-slate-100 dark:border-slate-800 p-4 text-center text-slate-500 dark:text-slate-400 text-sm">
-                No contacts yet. Use “Add from Telegram” in the bot chat.
+                Пока нет контактов. В чате с ботом нажмите «Добавить из Telegram».
               </div>
             ) : (
               external.map((peer) => (
@@ -217,7 +217,7 @@ export function UserList() {
                     onClick={() => inviteToRegister(peer)}
                     className="rounded-full border border-brand text-brand px-4 py-2 text-sm font-semibold bg-white dark:bg-slate-900 shadow-sm dark:shadow-none"
                   >
-                    Invite
+                    Пригласить
                   </PressableButton>
                 </div>
               ))

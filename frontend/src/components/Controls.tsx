@@ -50,16 +50,16 @@ export function Controls() {
   return (
     <div className="fixed bottom-6 inset-x-0 z-40 flex justify-center pointer-events-none">
       <div className="flex gap-4 pointer-events-auto">
-        <IconButton active={micOn} onClick={onMic} ariaLabel={micOn ? "Mute" : "Unmute"}>
+        <IconButton active={micOn} onClick={onMic} ariaLabel={micOn ? "Выключить микрофон" : "Включить микрофон"}>
           {micOn ? <MicIcon /> : <MicOffIcon />}
         </IconButton>
-        <IconButton active={camOn} onClick={onCam} ariaLabel={camOn ? "Turn off camera" : "Turn on camera"}>
+        <IconButton active={camOn} onClick={onCam} ariaLabel={camOn ? "Выключить камеру" : "Включить камеру"}>
           {camOn ? <CamIcon /> : <CamOffIcon />}
         </IconButton>
-        <IconButton active onClick={onSwitch} ariaLabel="Switch camera">
+        <IconButton active onClick={onSwitch} ariaLabel="Переключить камеру">
           <SwitchIcon />
         </IconButton>
-        <IconButton active onClick={() => hangUp()} ariaLabel="End call" variant="danger">
+        <IconButton active onClick={() => hangUp()} ariaLabel="Завершить звонок" variant="danger">
           <HangupIcon />
         </IconButton>
       </div>

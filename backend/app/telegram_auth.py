@@ -49,14 +49,14 @@ def verify_init_data(
       expected_hash = HMAC_SHA256(key=secret_key, msg=data_check_string)
     """
     if not init_data:
-        raise TelegramAuthError("Empty initData")
+        raise TelegramAuthError("Пустой initData")
 
     parsed = parse_qsl(init_data, keep_blank_values=True)
     data: dict[str, str] = dict(parsed)
 
     received_hash = data.get("hash")
     if not received_hash:
-        raise TelegramAuthError("Missing hash")
+        raise TelegramAuthError("Отсутствует hash")
 
     data_check_string = _build_data_check_string(parsed)
 
@@ -64,26 +64,26 @@ def verify_init_data(
     computed = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
     if not hmac.compare_digest(computed, received_hash):
-        raise TelegramAuthError("Invalid hash")
+        raise TelegramAuthError("Неверная подпись")
 
     auth_date_str = data.get("auth_date")
     if not auth_date_str:
-        raise TelegramAuthError("Missing auth_date")
+        raise TelegramAuthError("Отсутствует auth_date")
     try:
         auth_date = int(auth_date_str)
     except ValueError as exc:
-        raise TelegramAuthError("Invalid auth_date") from exc
+        raise TelegramAuthError("Некорректный auth_date") from exc
 
     if max_age_seconds > 0 and (time.time() - auth_date) > max_age_seconds:
-        raise TelegramAuthError("initData is stale")
+        raise TelegramAuthError("initData устарел")
 
     user_json = data.get("user")
     if not user_json:
-        raise TelegramAuthError("Missing user payload")
+        raise TelegramAuthError("Отсутствуют данные пользователя")
     try:
         user_obj: dict[str, Any] = json.loads(user_json)
     except json.JSONDecodeError as exc:
-        raise TelegramAuthError("Invalid user JSON") from exc
+        raise TelegramAuthError("Некорректный JSON пользователя") from exc
 
     try:
         tg_user = TelegramUser(
@@ -95,6 +95,6 @@ def verify_init_data(
             language_code=user_obj.get("language_code"),
         )
     except (KeyError, TypeError, ValueError) as exc:
-        raise TelegramAuthError("Malformed user payload") from exc
+        raise TelegramAuthError("Некорректные данные пользователя") from exc
 
     return VerifiedInitData(user=tg_user, auth_date=auth_date, raw=data)

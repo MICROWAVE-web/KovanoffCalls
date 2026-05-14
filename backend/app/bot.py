@@ -38,7 +38,7 @@ def _add_contacts_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [
                 KeyboardButton(
-                    text="Choose people (Telegram)",
+                    text="Выбрать людей (Telegram)",
                     request_users=KeyboardButtonRequestUsers(
                         request_id=REQUEST_USERS_ID,
                         user_is_bot=False,
@@ -48,7 +48,7 @@ def _add_contacts_keyboard() -> ReplyKeyboardMarkup:
                     ),
                 )
             ],
-            [KeyboardButton(text="Share phone contact", request_contact=True)],
+            [KeyboardButton(text="Поделиться номером телефона", request_contact=True)],
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -99,20 +99,20 @@ def build_dispatcher(webapp_url: str) -> Dispatcher:
     async def on_start(message: Message, command: CommandObject) -> None:
         reply_kb = ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text="Open Calls", web_app=WebAppInfo(url=webapp_url))]
+                [KeyboardButton(text="Открыть звонки", web_app=WebAppInfo(url=webapp_url))]
             ],
             resize_keyboard=True,
         )
         arg = (command.args or "").strip()
         if arg == "addcontacts":
             await message.answer(
-                "Pick up to 10 people to add to your Calls directory, "
-                "or share a phone contact if that person is on Telegram.",
+                "Выберите до 10 человек, чтобы добавить их в список Звонков, "
+                "или поделитесь контактом с телефоном, если этот человек в Telegram.",
                 reply_markup=_add_contacts_keyboard(),
             )
             return
         await message.answer(
-            "Welcome to Kovanoff Calls. Tap the button below to launch the app.",
+            "Добро пожаловать в Kovanoff Звонки. Нажмите кнопку ниже, чтобы открыть приложение.",
             reply_markup=reply_kb,
         )
 
@@ -125,16 +125,16 @@ def build_dispatcher(webapp_url: str) -> Dispatcher:
             return
         owner = await _resolve_owner(message.from_user.id)
         if owner is None:
-            await message.answer("Open the Calls mini app once to register, then try again.")
+            await message.answer("Сначала один раз откройте мини-приложение «Звонки», чтобы зарегистрироваться, затем повторите попытку.")
             return
         rows: list[tuple[int, str | None, str | None, str | None]] = []
         for su in us.users:
             rows.append((su.user_id, su.first_name, su.last_name, su.username))
         await _upsert_shared_peers(owner.id, rows)
         await message.answer(
-            f"Saved {len(rows)} contact(s). Return to the mini app and refresh the list.",
+            f"Сохранено контактов: {len(rows)}. Вернитесь в мини-приложение и обновите список.",
             reply_markup=ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text="Open Calls", web_app=WebAppInfo(url=webapp_url))]],
+                keyboard=[[KeyboardButton(text="Открыть звонки", web_app=WebAppInfo(url=webapp_url))]],
                 resize_keyboard=True,
             ),
         )
@@ -146,21 +146,21 @@ def build_dispatcher(webapp_url: str) -> Dispatcher:
         c: Contact = message.contact
         if c.user_id is None:
             await message.answer(
-                "This contact has no Telegram user id. Use “Choose people” to pick Telegram users."
+                "У этого контакта нет id в Telegram. Используйте «Выбрать людей», чтобы указать пользователей Telegram."
             )
             return
         owner = await _resolve_owner(message.from_user.id)
         if owner is None:
-            await message.answer("Open the Calls mini app once to register, then try again.")
+            await message.answer("Сначала один раз откройте мини-приложение «Звонки», чтобы зарегистрироваться, затем повторите попытку.")
             return
         await _upsert_shared_peers(
             owner.id,
             [(c.user_id, c.first_name, c.last_name, None)],
         )
         await message.answer(
-            "Contact saved. Return to the mini app and refresh the list.",
+            "Контакт сохранён. Вернитесь в мини-приложение и обновите список.",
             reply_markup=ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text="Open Calls", web_app=WebAppInfo(url=webapp_url))]],
+                keyboard=[[KeyboardButton(text="Открыть звонки", web_app=WebAppInfo(url=webapp_url))]],
                 resize_keyboard=True,
             ),
         )
@@ -169,12 +169,12 @@ def build_dispatcher(webapp_url: str) -> Dispatcher:
 
 
 def _build_incoming_call_message(payload: dict, webapp_url: str) -> tuple[str, InlineKeyboardMarkup]:
-    caller_name = payload.get("caller_name") or "Someone"
+    caller_name = payload.get("caller_name") or "Кто-то"
     target_url = payload.get("webapp_url") or webapp_url
-    text = f"Incoming call from {caller_name}. Tap to answer."
+    text = f"Входящий звонок от {caller_name}. Нажмите, чтобы ответить."
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Answer", web_app=WebAppInfo(url=target_url))]
+            [InlineKeyboardButton(text="Ответить", web_app=WebAppInfo(url=target_url))]
         ]
     )
     return text, kb

@@ -106,7 +106,7 @@ export function installCallFlow(): () => void {
             first_name: null,
             last_name: null,
             photo_url: null,
-            name: `User #${msg.target_user_id}`,
+            name: `Пользователь №${msg.target_user_id}`,
           };
           useAppStore.getState().setActiveCall({
             callId: msg.call_id,

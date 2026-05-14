@@ -116,7 +116,7 @@ export function IncomingCallModal() {
               <div id="incoming-call-title" className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                 {incoming.caller.name}
               </div>
-              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">Incoming video call…</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">Входящий видеозвонок…</div>
             </div>
 
             <motion.div
@@ -131,7 +131,7 @@ export function IncomingCallModal() {
                   onClick={() => declineIncomingCall()}
                   className="w-full rounded-full bg-red-500 text-white font-semibold py-3 shadow-sm active:bg-red-600 hover:bg-red-600/95"
                 >
-                  Decline
+                  Отклонить
                 </PressableButton>
               </motion.div>
               <motion.div className="flex-1" variants={buttonChild}>
@@ -140,7 +140,7 @@ export function IncomingCallModal() {
                   onClick={() => void acceptIncomingCall()}
                   className="w-full rounded-full bg-emerald-500 text-white font-semibold py-3 shadow-sm active:bg-emerald-600 hover:bg-emerald-600/95"
                 >
-                  Accept
+                  Ответить
                 </PressableButton>
               </motion.div>
             </motion.div>

@@ -114,5 +114,5 @@ async def get_user(
 ) -> UserPublic:
     user = await session.scalar(select(User).where(User.id == user_id))
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
     return UserPublic.from_model(user)

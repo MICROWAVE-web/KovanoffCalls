@@ -181,16 +181,16 @@ async def _handle_call_invite(
 ) -> None:
     target_user_id = payload.get("target_user_id")
     if not isinstance(target_user_id, int):
-        await _send_error(ws, "target_user_id must be int")
+        await _send_error(ws, "target_user_id должен быть целым числом")
         return
     if target_user_id == user.id:
-        await _send_error(ws, "cannot call yourself")
+        await _send_error(ws, "нельзя позвонить себе")
         return
 
     async with SessionLocal() as session:
         target = await session.scalar(select(User).where(User.id == target_user_id))
         if target is None:
-            await _send_error(ws, "target user not found")
+            await _send_error(ws, "пользователь не найден")
             return
         call = await calls_service.create_pending_call(session, user.id, target.id)
         target_telegram_id = target.telegram_id
@@ -240,19 +240,19 @@ async def _handle_call_accept(
 ) -> None:
     call_id = _parse_call_id(payload.get("call_id"))
     if call_id is None:
-        await _send_error(ws, "invalid call_id")
+        await _send_error(ws, "неверный идентификатор звонка")
         return
 
     async with SessionLocal() as session:
         call = await calls_service.get_call(session, call_id)
         if call is None:
-            await _send_error(ws, "call not found", call_id=str(call_id))
+            await _send_error(ws, "звонок не найден", call_id=str(call_id))
             return
         if call.callee_id != user.id:
-            await _send_error(ws, "not allowed", call_id=str(call_id))
+            await _send_error(ws, "недостаточно прав", call_id=str(call_id))
             return
         if call.status is not CallStatus.pending:
-            await _send_error(ws, f"call not pending ({call.status.value})", call_id=str(call_id))
+            await _send_error(ws, f"звонок не ожидает ответа ({call.status.value})", call_id=str(call_id))
             return
         await calls_service.mark_active(session, call)
         caller_id = call.caller_id
@@ -275,16 +275,16 @@ async def _handle_call_decline(
 ) -> None:
     call_id = _parse_call_id(payload.get("call_id"))
     if call_id is None:
-        await _send_error(ws, "invalid call_id")
+        await _send_error(ws, "неверный идентификатор звонка")
         return
 
     async with SessionLocal() as session:
         call = await calls_service.get_call(session, call_id)
         if call is None or call.callee_id != user.id:
-            await _send_error(ws, "call not found", call_id=str(call_id))
+            await _send_error(ws, "звонок не найден", call_id=str(call_id))
             return
         if call.status is not CallStatus.pending:
-            await _send_error(ws, "call not pending", call_id=str(call_id))
+            await _send_error(ws, "звонок не ожидает ответа", call_id=str(call_id))
             return
         await calls_service.mark_declined(session, call)
         caller_id = call.caller_id
@@ -312,16 +312,16 @@ async def _handle_relay(
 ) -> None:
     call_id = _parse_call_id(payload.get("call_id"))
     if call_id is None:
-        await _send_error(ws, "invalid call_id")
+        await _send_error(ws, "неверный идентификатор звонка")
         return
 
     async with SessionLocal() as session:
         call = await calls_service.get_call(session, call_id)
         if call is None:
-            await _send_error(ws, "call not found", call_id=str(call_id))
+            await _send_error(ws, "звонок не найден", call_id=str(call_id))
             return
         if user.id not in (call.caller_id, call.callee_id):
-            await _send_error(ws, "not a participant", call_id=str(call_id))
+            await _send_error(ws, "вы не участник звонка", call_id=str(call_id))
             return
         peer_id = call.callee_id if user.id == call.caller_id else call.caller_id
 
@@ -329,7 +329,7 @@ async def _handle_relay(
     if msg_type in ("offer", "answer"):
         sdp = payload.get("sdp")
         if not isinstance(sdp, (str, dict)):
-            await _send_error(ws, f"invalid sdp for {msg_type}", call_id=str(call_id))
+            await _send_error(ws, f"неверный SDP для {msg_type}", call_id=str(call_id))
             return
         forward["sdp"] = sdp
     elif msg_type == "ice_candidate":
@@ -363,7 +363,7 @@ async def _handle_relay(
             user.id,
             peer_id,
         )
-        await _send_error(ws, "peer not reachable", call_id=str(call_id))
+        await _send_error(ws, "собеседник недоступен", call_id=str(call_id))
 
 
 async def _handle_call_end(
@@ -371,7 +371,7 @@ async def _handle_call_end(
 ) -> None:
     call_id = _parse_call_id(payload.get("call_id"))
     if call_id is None:
-        await _send_error(ws, "invalid call_id")
+        await _send_error(ws, "неверный идентификатор звонка")
         return
 
     raw_reason = payload.get("reason")
@@ -386,7 +386,7 @@ async def _handle_call_end(
         if call is None:
             return
         if user.id not in (call.caller_id, call.callee_id):
-            await _send_error(ws, "not a participant", call_id=str(call_id))
+            await _send_error(ws, "вы не участник звонка", call_id=str(call_id))
             return
         if call.status in (CallStatus.ended, CallStatus.declined, CallStatus.missed):
             return
@@ -510,7 +510,7 @@ async def signaling_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
         while True:
             payload = await websocket.receive_json()
             if not isinstance(payload, dict):
-                await _send_error(websocket, "payload must be an object")
+                await _send_error(websocket, "полезная нагрузка должна быть объектом")
                 continue
             msg_type = payload.get("type")
 
@@ -530,7 +530,7 @@ async def signaling_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
             elif msg_type == "call_end":
                 await _handle_call_end(user, payload, websocket)
             else:
-                await _send_error(websocket, f"unknown type: {msg_type}")
+                await _send_error(websocket, f"неизвестный тип: {msg_type}")
     except WebSocketDisconnect:
         logger.info("signaling WebSocketDisconnect user_id=%s", user.id)
     except Exception as exc:
