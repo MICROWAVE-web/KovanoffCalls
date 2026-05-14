@@ -26,6 +26,8 @@ interface TelegramWebApp {
   };
   themeParams: TelegramThemeParams;
   colorScheme: "light" | "dark";
+  onEvent?: (eventType: string, callback: () => void) => void;
+  offEvent?: (eventType: string, callback: () => void) => void;
   isExpanded: boolean;
   ready: () => void;
   expand: () => void;

@@ -3,6 +3,7 @@ import { useAppStore } from "../store";
 import { placeCall, refreshDirectory } from "../callFlow";
 import type { ExternalPeer, OnlineUser } from "../types";
 import { openTelegramLink } from "../telegram";
+import { PressableButton } from "./PressableButton";
 
 function UserAvatar({ user }: { user: OnlineUser }) {
   const initials = user.name
@@ -20,7 +21,7 @@ function UserAvatar({ user }: { user: OnlineUser }) {
     );
   }
   return (
-    <div className="h-12 w-12 rounded-full bg-brand/15 text-brand flex items-center justify-center font-semibold">
+    <div className="h-12 w-12 rounded-full bg-brand/15 dark:bg-brand/25 text-brand flex items-center justify-center font-semibold">
       {initials || "?"}
     </div>
   );
@@ -33,7 +34,7 @@ function ExternalAvatar({ name }: { name: string }) {
     .slice(0, 2)
     .join("");
   return (
-    <div className="h-12 w-12 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold">
+    <div className="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center font-semibold">
       {initials || "?"}
     </div>
   );
@@ -95,58 +96,58 @@ export function UserList() {
   const totalOthers = online.length + offline.length + external.length;
 
   return (
-    <div className="min-h-full bg-slate-50">
+    <div className="min-h-full bg-slate-50 dark:bg-slate-950">
       <header className="px-5 pt-6 pb-3">
-        <h1 className="text-2xl font-semibold text-slate-900">People</h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">People</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
           {wsConnected ? "Connected" : "Connecting…"} · {totalOthers} in directory
         </p>
         <div className="flex flex-wrap gap-2 mt-3">
-          <button
+          <PressableButton
             type="button"
             onClick={() => void refreshDirectory()}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm"
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm"
           >
             Refresh
-          </button>
-          <button
+          </PressableButton>
+          <PressableButton
             type="button"
             onClick={openAddContacts}
             className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white shadow-sm active:bg-brand-dark"
           >
             Add from Telegram
-          </button>
+          </PressableButton>
         </div>
       </header>
 
       <div className="px-4 pb-24 space-y-6">
         <section>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
             Online ({online.length})
           </h2>
           <div className="space-y-2">
             {online.length === 0 ? (
-              <div className="rounded-lg bg-white shadow-sm p-4 text-center text-slate-500 text-sm">
+              <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border border-slate-100 dark:border-slate-800 p-4 text-center text-slate-500 dark:text-slate-400 text-sm">
                 No one else is online.
               </div>
             ) : (
               online.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center gap-3 rounded-lg bg-white shadow-sm p-3"
+                  className="flex items-center gap-3 rounded-lg bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border border-slate-100 dark:border-slate-800 p-3"
                 >
                   <UserAvatar user={user} />
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-slate-900 truncate">{user.name}</div>
-                    <div className="text-xs text-emerald-600 mt-0.5">online</div>
+                    <div className="font-medium text-slate-900 dark:text-slate-100 truncate">{user.name}</div>
+                    <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">online</div>
                   </div>
-                  <button
+                  <PressableButton
                     type="button"
                     onClick={() => void placeCall(user.id)}
                     className="rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white shadow-sm active:bg-brand-dark"
                   >
                     Call
-                  </button>
+                  </PressableButton>
                 </div>
               ))
             )}
@@ -154,32 +155,32 @@ export function UserList() {
         </section>
 
         <section>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
             Registered, offline ({offline.length})
           </h2>
           <div className="space-y-2">
             {offline.length === 0 ? (
-              <div className="rounded-lg bg-white shadow-sm p-4 text-center text-slate-500 text-sm">
+              <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border border-slate-100 dark:border-slate-800 p-4 text-center text-slate-500 dark:text-slate-400 text-sm">
                 No registered users are offline.
               </div>
             ) : (
               offline.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center gap-3 rounded-lg bg-white shadow-sm p-3"
+                  className="flex items-center gap-3 rounded-lg bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border border-slate-100 dark:border-slate-800 p-3"
                 >
                   <UserAvatar user={user} />
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-slate-900 truncate">{user.name}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">offline</div>
+                    <div className="font-medium text-slate-900 dark:text-slate-100 truncate">{user.name}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">offline</div>
                   </div>
-                  <button
+                  <PressableButton
                     type="button"
                     onClick={() => void placeCall(user.id)}
                     className="rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white shadow-sm active:bg-brand-dark"
                   >
                     Call
-                  </button>
+                  </PressableButton>
                 </div>
               ))
             )}
@@ -187,37 +188,37 @@ export function UserList() {
         </section>
 
         <section>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
             Not in app ({external.length})
           </h2>
-          <p className="text-xs text-slate-500 mb-2">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
             People you shared via the bot. They are not registered in Calls yet.
           </p>
           <div className="space-y-2">
             {external.length === 0 ? (
-              <div className="rounded-lg bg-white shadow-sm p-4 text-center text-slate-500 text-sm">
+              <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border border-slate-100 dark:border-slate-800 p-4 text-center text-slate-500 dark:text-slate-400 text-sm">
                 No contacts yet. Use “Add from Telegram” in the bot chat.
               </div>
             ) : (
               external.map((peer) => (
                 <div
                   key={peer.telegram_id}
-                  className="flex items-center gap-3 rounded-lg bg-white shadow-sm p-3"
+                  className="flex items-center gap-3 rounded-lg bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border border-slate-100 dark:border-slate-800 p-3"
                 >
                   <ExternalAvatar name={peer.name} />
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-slate-900 truncate">{peer.name}</div>
-                    <div className="text-xs text-slate-500 mt-0.5 truncate">
+                    <div className="font-medium text-slate-900 dark:text-slate-100 truncate">{peer.name}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                       {peer.username ? `@${peer.username}` : `id ${peer.telegram_id}`}
                     </div>
                   </div>
-                  <button
+                  <PressableButton
                     type="button"
                     onClick={() => inviteToRegister(peer)}
-                    className="rounded-full border border-brand text-brand px-4 py-2 text-sm font-semibold bg-white shadow-sm"
+                    className="rounded-full border border-brand text-brand px-4 py-2 text-sm font-semibold bg-white dark:bg-slate-900 shadow-sm dark:shadow-none"
                   >
                     Invite
-                  </button>
+                  </PressableButton>
                 </div>
               ))
             )}

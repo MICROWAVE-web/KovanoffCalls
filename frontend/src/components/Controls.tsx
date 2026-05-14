@@ -18,7 +18,7 @@ function IconButton({
 }) {
   const danger = variant === "danger";
   const base =
-    "h-14 w-14 rounded-full flex items-center justify-center text-white shadow-lg active:scale-95 transition-transform";
+    "ui-pressable h-14 w-14 rounded-full flex items-center justify-center text-white shadow-lg";
   const color = danger
     ? "bg-red-500 active:bg-red-600"
     : active

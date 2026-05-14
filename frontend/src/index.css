@@ -16,3 +16,24 @@ body {
   background: #f8fafc;
   color: #0f172a;
 }
+
+html.dark body {
+  background: #020617;
+  color: #f1f5f9;
+}
+
+@layer utilities {
+  .ui-pressable {
+    transition: transform 150ms ease-out;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .ui-pressable:hover {
+      transform: scale(1.02);
+    }
+  }
+
+  .ui-pressable:active {
+    transform: scale(0.97);
+  }
+}
