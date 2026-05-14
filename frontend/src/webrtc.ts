@@ -2,18 +2,21 @@ import { signaling } from "./websocket";
 import { useAppStore } from "./store";
 
 function buildIceServers(): RTCIceServer[] {
-  const servers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+  const servers: RTCIceServer[] = [];
 
   const turnUrl = import.meta.env.VITE_TURN_URL;
   const turnUser = import.meta.env.VITE_TURN_USERNAME;
   const turnPass = import.meta.env.VITE_TURN_PASSWORD;
   if (turnUrl && turnUser && turnPass) {
+    // List TURN before STUN so browsers prioritize relay candidates on difficult NATs.
     servers.push({
       urls: [`${turnUrl}?transport=udp`, `${turnUrl}?transport=tcp`],
       username: turnUser,
       credential: turnPass,
     });
   }
+
+  servers.push({ urls: "stun:stun.l.google.com:19302" });
 
   return servers;
 }
@@ -30,6 +33,7 @@ export class CallSession {
   private pendingRemoteIce: RTCIceCandidateInit[] = [];
   private remoteDescriptionSet = false;
   private closed = false;
+  private failureHandled = false;
 
   constructor(callId: string) {
     this.callId = callId;
@@ -62,10 +66,34 @@ export class CallSession {
           status: "active",
           startedAt: useAppStore.getState().activeCall?.startedAt ?? Date.now(),
         });
-      } else if (state === "failed" || state === "closed") {
-        // upstream caller decides what to do
+      } else if (state === "failed") {
+        this.endCallDueToMediaFailure("peer_connection_failed");
       }
     };
+
+    this.pc.oniceconnectionstatechange = () => {
+      const ice = this.pc.iceConnectionState;
+      if (ice === "failed") {
+        this.endCallDueToMediaFailure("ice_failed");
+      }
+    };
+  }
+
+  private endCallDueToMediaFailure(reason: string): void {
+    if (this.failureHandled || this.closed) return;
+    this.failureHandled = true;
+    console.warn("WebRTC:", reason);
+    try {
+      signaling.send({ type: "call_end", call_id: this.callId });
+    } catch {
+      // ignore
+    }
+    this.hangup();
+    if (activeSession === this) {
+      activeSession = null;
+    }
+    useAppStore.getState().setActiveCall(null);
+    useAppStore.getState().setIncomingCall(null);
   }
 
   async startLocalMedia(): Promise<MediaStream> {
