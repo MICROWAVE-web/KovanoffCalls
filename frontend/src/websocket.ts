@@ -1,3 +1,4 @@
+import { callDebug, callDebugWarn, summarizeIceCandidate, summarizeSdp } from "./callDebug";
 import type { SignalingIncoming, SignalingOutgoing } from "./types";
 
 type Listener = (msg: SignalingIncoming) => void;
@@ -10,6 +11,32 @@ const RECONNECT_MAX_DELAY = 15_000;
 // 1000 = normal closure (server told us to go away on purpose; don't reconnect).
 // 1008 = policy violation (auth rejected; reconnecting won't help).
 const NO_RECONNECT_CODES = new Set<number>([1000, 1008]);
+
+function summarizeOutgoing(msg: SignalingOutgoing): Record<string, unknown> {
+  switch (msg.type) {
+    case "call_invite":
+      return { type: msg.type, target_user_id: msg.target_user_id };
+    case "call_accept":
+    case "call_decline":
+    case "call_end":
+      return { type: msg.type, call_id: msg.call_id };
+    case "offer":
+    case "answer":
+      return { type: msg.type, call_id: msg.call_id, sdp: summarizeSdp(msg.sdp) };
+    case "ice_candidate":
+      return {
+        type: msg.type,
+        call_id: msg.call_id,
+        line: summarizeIceCandidate(msg.candidate),
+      };
+    default:
+      return { type: (msg as { type: string }).type };
+  }
+}
+
+function shouldLogOutgoing(msg: SignalingOutgoing): boolean {
+  return msg.type !== "ping";
+}
 
 export class SignalingClient {
   private ws: WebSocket | null = null;
@@ -54,9 +81,17 @@ export class SignalingClient {
   }
 
   send(message: SignalingOutgoing): void {
+    if (shouldLogOutgoing(message)) {
+      callDebug("signaling.send", summarizeOutgoing(message));
+    }
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {
+      callDebugWarn("signaling.send.queued_outbox", {
+        type: message.type,
+        outboxLen: this.outbox.length + 1,
+        wsReady: this.ws?.readyState ?? null,
+      });
       this.outbox.push(message);
     }
   }
@@ -73,6 +108,10 @@ export class SignalingClient {
 
   private openSocket(): void {
     if (!this.token) return;
+    callDebug("signaling.connecting", {
+      wsBase: WS_BASE,
+      reconnectAttempt: this.reconnectAttempt,
+    });
     if (this.ws) {
       try {
         this.ws.close(1000, "superseded by new socket");
@@ -80,13 +119,16 @@ export class SignalingClient {
         // ignore
       }
     }
-    const url = `${WS_BASE}/ws?token=${encodeURIComponent(this.token)}`;
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(`${WS_BASE}/ws?token=${encodeURIComponent(this.token)}`);
     this.ws = ws;
 
     ws.onopen = () => {
       if (this.ws !== ws) return;
       this.reconnectAttempt = 0;
+      callDebug("signaling.open", {
+        outboxPending: this.outbox.length,
+        wsBase: WS_BASE,
+      });
       this.emitConnected(true);
       this.flushOutbox();
       this.startHeartbeat();
@@ -100,6 +142,12 @@ export class SignalingClient {
       } catch {
         return;
       }
+      if (parsed.type !== "pong" && parsed.type !== "presence") {
+        callDebug("signaling.message", {
+          type: parsed.type,
+          call_id: "call_id" in parsed ? parsed.call_id : undefined,
+        });
+      }
       this.listeners.forEach((l) => {
         try {
           l(parsed);
@@ -112,6 +160,12 @@ export class SignalingClient {
     ws.onclose = (event) => {
       // If a newer socket has already replaced us, just exit quietly.
       if (this.ws !== ws) return;
+      callDebugWarn("signaling.close", {
+        code: event.code,
+        reason: event.reason || "",
+        wasClean: event.wasClean,
+        outboxLen: this.outbox.length,
+      });
       this.stopHeartbeat();
       this.ws = null;
       this.emitConnected(false);
@@ -121,12 +175,14 @@ export class SignalingClient {
     };
 
     ws.onerror = () => {
-      // close handler will run after this
+      callDebugWarn("signaling.error_event", { note: "see signaling.close for details" });
     };
   }
 
   private flushOutbox(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const n = this.outbox.length;
+    if (n) callDebug("signaling.flushOutbox", { count: n });
     while (this.outbox.length > 0) {
       const next = this.outbox.shift();
       if (next) this.ws.send(JSON.stringify(next));
@@ -154,6 +210,7 @@ export class SignalingClient {
       RECONNECT_MAX_DELAY,
       RECONNECT_BASE_DELAY * 2 ** Math.min(this.reconnectAttempt - 1, 4),
     );
+    callDebugWarn("signaling.reconnect_scheduled", { attempt: this.reconnectAttempt, delayMs: delay });
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
       this.openSocket();

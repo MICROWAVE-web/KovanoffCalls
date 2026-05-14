@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -20,6 +21,33 @@ from app.schemas import UserPublic
 from app.websocket_manager import manager
 
 logger = logging.getLogger(__name__)
+
+
+def _sdp_summary(sdp: Any) -> str:
+    if isinstance(sdp, dict):
+        text = str(sdp.get("sdp") or "")
+        typ = str(sdp.get("type") or "?")
+    elif isinstance(sdp, str):
+        text = sdp
+        typ = "?"
+    else:
+        return f"invalid_sdp_type={type(sdp).__name__}"
+    m_lines = [ln for ln in text.splitlines() if ln.startswith("m=")][:6]
+    return f"type={typ} bytes={len(text)} m_lines={m_lines!r}"
+
+
+def _ice_summary(candidate: Any) -> str:
+    if candidate is None:
+        return "null"
+    if not isinstance(candidate, dict):
+        return f"non_dict={type(candidate).__name__}"
+    c = candidate.get("candidate")
+    if not c:
+        return "end_of_candidates"
+    m = re.search(r"typ (\S+)", str(c))
+    typ = m.group(1) if m else "?"
+    return f"typ={typ} chars={len(str(c))}"
+
 
 router = APIRouter()
 
@@ -71,6 +99,12 @@ async def _ring_timeout_watcher(call_id: uuid.UUID, callee_id: int, caller_id: i
             return
         await calls_service.mark_missed(session, call)
 
+    logger.info(
+        "signaling ring_timeout call_id=%s callee_id=%s caller_id=%s -> missed",
+        call_id,
+        callee_id,
+        caller_id,
+    )
     await manager.send_to_user(
         caller_id,
         {"type": "call_missed", "call_id": str(call_id)},
@@ -178,6 +212,14 @@ async def _handle_call_invite(
     delivered = await manager.send_to_user(target_user_id, invite_payload)
     await ws.send_json(ack_payload)
 
+    logger.info(
+        "signaling call_invite call_id=%s caller_id=%s callee_id=%s ws_delivered=%s",
+        call.id,
+        user.id,
+        target_user_id,
+        delivered,
+    )
+
     if not delivered:
         try:
             caller_name = user.display_name
@@ -220,6 +262,12 @@ async def _handle_call_accept(
     forward = {"type": "call_accepted", "call_id": str(call_id), "by_user_id": user.id}
     await manager.send_to_user(caller_id, forward)
     await ws.send_json({"type": "call_active", "call_id": str(call_id), "peer_user_id": caller_id})
+    logger.info(
+        "signaling call_accept call_id=%s callee_id=%s caller_id=%s",
+        call_id,
+        user.id,
+        caller_id,
+    )
 
 
 async def _handle_call_decline(
@@ -247,6 +295,12 @@ async def _handle_call_decline(
 
     await manager.send_to_user(
         caller_id, {"type": "call_declined", "call_id": str(call_id), "by_user_id": user.id}
+    )
+    logger.info(
+        "signaling call_decline call_id=%s callee_id=%s caller_id=%s",
+        call_id,
+        user.id,
+        caller_id,
     )
 
 
@@ -282,7 +336,33 @@ async def _handle_relay(
         forward["candidate"] = payload.get("candidate")
 
     delivered = await manager.send_to_user(peer_id, forward)
+    if msg_type == "ice_candidate":
+        logger.info(
+            "signaling relay ice_candidate call_id=%s from_user=%s to_peer=%s %s delivered=%s",
+            call_id,
+            user.id,
+            peer_id,
+            _ice_summary(forward.get("candidate")),
+            delivered,
+        )
+    elif msg_type in ("offer", "answer"):
+        logger.info(
+            "signaling relay %s call_id=%s from_user=%s to_peer=%s %s delivered=%s",
+            msg_type,
+            call_id,
+            user.id,
+            peer_id,
+            _sdp_summary(forward.get("sdp")),
+            delivered,
+        )
     if not delivered:
+        logger.warning(
+            "signaling relay UNDELIVERED type=%s call_id=%s from_user=%s peer_id=%s",
+            msg_type,
+            call_id,
+            user.id,
+            peer_id,
+        )
         await _send_error(ws, "peer not reachable", call_id=str(call_id))
 
 
@@ -313,6 +393,12 @@ async def _handle_call_end(
     await manager.send_to_user(
         peer_id, {"type": "call_ended", "call_id": str(call_id), "by_user_id": user.id}
     )
+    logger.info(
+        "signaling call_end call_id=%s ended_by_user=%s peer_id=%s",
+        call_id,
+        user.id,
+        peer_id,
+    )
 
 
 async def _cleanup_user_calls(user_id: int) -> None:
@@ -331,6 +417,7 @@ async def _cleanup_user_calls(user_id: int) -> None:
             if call.status is CallStatus.pending:
                 await calls_service.mark_missed(session, call)
                 peer_msg = {"type": "call_cancelled", "call_id": str(call_id)}
+                action = "call_cancelled_pending"
             else:
                 await calls_service.mark_ended(session, call)
                 peer_msg = {
@@ -339,10 +426,19 @@ async def _cleanup_user_calls(user_id: int) -> None:
                     "by_user_id": user_id,
                     "reason": "peer_disconnected",
                 }
+                action = "call_ended_peer_disconnected"
 
         sessions.cancel_ring_task(call_id)
         sessions.remove(user_id, call_id)
         sessions.remove(peer_id, call_id)
+        logger.info(
+            "signaling cleanup_call disconnected_user=%s call_id=%s peer_id=%s action=%s peer_msg=%s",
+            user_id,
+            call_id,
+            peer_id,
+            action,
+            peer_msg,
+        )
         await manager.send_to_user(peer_id, peer_msg)
 
 
@@ -388,6 +484,8 @@ async def signaling_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
 
     publisher = NotificationPublisher(presence.redis)
 
+    logger.info("signaling ws accepted user_id=%s sending hello", user.id)
+
     await websocket.send_json(
         {"type": "hello", "user": UserPublic.from_model(user).model_dump()}
     )
@@ -401,6 +499,9 @@ async def signaling_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
                 await _send_error(websocket, "payload must be an object")
                 continue
             msg_type = payload.get("type")
+
+            if msg_type != "ping":
+                logger.info("signaling recv user_id=%s type=%s", user.id, msg_type)
 
             if msg_type == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -417,12 +518,17 @@ async def signaling_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
             else:
                 await _send_error(websocket, f"unknown type: {msg_type}")
     except WebSocketDisconnect:
-        pass
+        logger.info("signaling WebSocketDisconnect user_id=%s", user.id)
     except Exception as exc:
         logger.exception("signaling error for user %s: %s", user.id, exc)
     finally:
         refresher.cancel()
         was_active = await manager.disconnect(user.id, websocket)
+        logger.info(
+            "signaling ws teardown user_id=%s was_active_connection=%s",
+            user.id,
+            was_active,
+        )
         if was_active:
             # We were the user's current connection — do the real teardown.
             await presence.mark_offline(user.id)

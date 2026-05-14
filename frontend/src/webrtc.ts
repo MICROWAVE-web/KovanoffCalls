@@ -1,3 +1,10 @@
+import {
+  callDebug,
+  callDebugWarn,
+  iceServersForLog,
+  summarizeIceCandidate,
+  summarizeSdp,
+} from "./callDebug";
 import { signaling } from "./websocket";
 import { useAppStore } from "./store";
 
@@ -37,11 +44,19 @@ export class CallSession {
 
   constructor(callId: string) {
     this.callId = callId;
+    callDebug("webrtc.constructor", {
+      callId,
+      iceServers: iceServersForLog(),
+      ua: typeof navigator !== "undefined" ? navigator.userAgent : "",
+    });
     this.pc = new RTCPeerConnection(PC_CONFIG);
     this.remoteStream = new MediaStream();
     useAppStore.getState().setRemoteStream(this.remoteStream);
 
     this.pc.ontrack = (event) => {
+      const streams = event.streams[0];
+      const tracks = streams?.getTracks().map((t) => `${t.kind}:${t.id}:${t.readyState}`) ?? [];
+      callDebug("webrtc.ontrack", { callId: this.callId, streams: event.streams.length, tracks });
       event.streams[0]?.getTracks().forEach((track) => {
         if (!this.remoteStream.getTracks().includes(track)) {
           this.remoteStream.addTrack(track);
@@ -52,27 +67,56 @@ export class CallSession {
     };
 
     this.pc.onicecandidate = (event) => {
+      const json = event.candidate ? event.candidate.toJSON() : null;
+      callDebug("webrtc.localIce", {
+        callId: this.callId,
+        line: summarizeIceCandidate(json),
+      });
       signaling.send({
         type: "ice_candidate",
         call_id: this.callId,
-        candidate: event.candidate ? event.candidate.toJSON() : null,
+        candidate: json,
+      });
+    };
+
+    this.pc.onsignalingstatechange = () => {
+      callDebug("webrtc.signalingState", {
+        callId: this.callId,
+        signalingState: this.pc.signalingState,
+      });
+    };
+
+    this.pc.onicegatheringstatechange = () => {
+      callDebug("webrtc.iceGatheringState", {
+        callId: this.callId,
+        iceGatheringState: this.pc.iceGatheringState,
       });
     };
 
     this.pc.onconnectionstatechange = () => {
       const state = this.pc.connectionState;
+      callDebug("webrtc.connectionState", { callId: this.callId, connectionState: state });
       if (state === "connected") {
         useAppStore.getState().updateActiveCall({
           status: "active",
           startedAt: useAppStore.getState().activeCall?.startedAt ?? Date.now(),
         });
+        callDebug("webrtc.connected", {
+          callId: this.callId,
+          connectionState: this.pc.connectionState,
+          iceConnectionState: this.pc.iceConnectionState,
+          iceGatheringState: this.pc.iceGatheringState,
+        });
       } else if (state === "failed") {
         this.endCallDueToMediaFailure("peer_connection_failed");
+      } else if (state === "disconnected") {
+        callDebugWarn("webrtc.connectionState.disconnected", { callId: this.callId });
       }
     };
 
     this.pc.oniceconnectionstatechange = () => {
       const ice = this.pc.iceConnectionState;
+      callDebug("webrtc.iceConnectionState", { callId: this.callId, iceConnectionState: ice });
       if (ice === "failed") {
         this.endCallDueToMediaFailure("ice_failed");
       }
@@ -82,7 +126,19 @@ export class CallSession {
   private endCallDueToMediaFailure(reason: string): void {
     if (this.failureHandled || this.closed) return;
     this.failureHandled = true;
-    console.warn("WebRTC:", reason);
+    callDebugWarn("webrtc.mediaFailure.start", {
+      reason,
+      callId: this.callId,
+      connectionState: this.pc.connectionState,
+      iceConnectionState: this.pc.iceConnectionState,
+      signalingState: this.pc.signalingState,
+    });
+    void this.finalizeMediaFailure(reason);
+  }
+
+  private async finalizeMediaFailure(reason: string): Promise<void> {
+    await this.logConnectivitySnapshot(`mediaFailure:${reason}`);
+    callDebugWarn("webrtc.mediaFailure.end", { reason, callId: this.callId });
     try {
       signaling.send({ type: "call_end", call_id: this.callId });
     } catch {
@@ -96,7 +152,80 @@ export class CallSession {
     useAppStore.getState().setIncomingCall(null);
   }
 
+  private async logConnectivitySnapshot(context: string): Promise<void> {
+    if (this.closed) return;
+    const snap = {
+      context,
+      callId: this.callId,
+      connectionState: this.pc.connectionState,
+      iceConnectionState: this.pc.iceConnectionState,
+      iceGatheringState: this.pc.iceGatheringState,
+      signalingState: this.pc.signalingState,
+      localDescription: this.pc.localDescription
+        ? summarizeSdp(this.pc.localDescription)
+        : null,
+      remoteDescription: this.pc.remoteDescription
+        ? summarizeSdp(this.pc.remoteDescription)
+        : null,
+    };
+    callDebug("webrtc.snapshot", snap);
+    try {
+      const stats = await this.pc.getStats();
+      const pairs: Array<Record<string, unknown>> = [];
+      const locals: Array<Record<string, unknown>> = [];
+      const remotes: Array<Record<string, unknown>> = [];
+      stats.forEach((r) => {
+        if (r.type === "candidate-pair") {
+          const x = r as unknown as {
+            state?: string;
+            nominated?: boolean;
+            localCandidateId?: string;
+            remoteCandidateId?: string;
+            priority?: number;
+          };
+          pairs.push({
+            id: r.id,
+            state: x.state,
+            nominated: x.nominated,
+            localCandidateId: x.localCandidateId,
+            remoteCandidateId: x.remoteCandidateId,
+            priority: x.priority,
+          });
+        } else if (r.type === "local-candidate") {
+          const x = r as unknown as { candidateType?: string; protocol?: string; address?: string };
+          locals.push({
+            id: r.id,
+            candidateType: x.candidateType,
+            protocol: x.protocol,
+            address: x.address,
+          });
+        } else if (r.type === "remote-candidate") {
+          const x = r as unknown as { candidateType?: string; protocol?: string; address?: string };
+          remotes.push({
+            id: r.id,
+            candidateType: x.candidateType,
+            protocol: x.protocol,
+            address: x.address,
+          });
+        }
+      });
+      callDebug("webrtc.getStats", {
+        context,
+        callId: this.callId,
+        candidatePairCount: pairs.length,
+        pairs,
+        localCandidateCount: locals.length,
+        locals,
+        remoteCandidateCount: remotes.length,
+        remotes,
+      });
+    } catch (err) {
+      callDebugWarn("webrtc.getStats.error", { callId: this.callId, err: String(err) });
+    }
+  }
+
   async startLocalMedia(): Promise<MediaStream> {
+    callDebug("webrtc.startLocalMedia.begin", { callId: this.callId });
     const { facing } = useAppStore.getState().mediaState;
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
@@ -110,50 +239,74 @@ export class CallSession {
     stream.getVideoTracks().forEach((t) => (t.enabled = camOn));
 
     stream.getTracks().forEach((track) => this.pc.addTrack(track, stream));
+    callDebug("webrtc.startLocalMedia.done", {
+      callId: this.callId,
+      tracks: stream.getTracks().map((t) => ({ kind: t.kind, id: t.id, label: t.label })),
+    });
     return stream;
   }
 
   async createOffer(): Promise<void> {
+    callDebug("webrtc.createOffer.begin", { callId: this.callId });
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
+    callDebug("webrtc.createOffer.sent", {
+      callId: this.callId,
+      sdp: summarizeSdp(offer),
+    });
     signaling.send({ type: "offer", call_id: this.callId, sdp: offer });
   }
 
   async handleRemoteOffer(sdp: RTCSessionDescriptionInit): Promise<void> {
+    callDebug("webrtc.handleRemoteOffer", { callId: this.callId, sdp: summarizeSdp(sdp) });
     await this.pc.setRemoteDescription(sdp);
     this.remoteDescriptionSet = true;
     await this.drainPendingIce();
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
+    callDebug("webrtc.handleRemoteOffer.answer", { callId: this.callId, sdp: summarizeSdp(answer) });
     signaling.send({ type: "answer", call_id: this.callId, sdp: answer });
   }
 
   async handleRemoteAnswer(sdp: RTCSessionDescriptionInit): Promise<void> {
+    callDebug("webrtc.handleRemoteAnswer", { callId: this.callId, sdp: summarizeSdp(sdp) });
     await this.pc.setRemoteDescription(sdp);
     this.remoteDescriptionSet = true;
     await this.drainPendingIce();
   }
 
   async addRemoteIce(candidate: RTCIceCandidateInit | null): Promise<void> {
-    if (!candidate) return;
+    if (!candidate) {
+      callDebug("webrtc.remoteIce.endOfCandidates", { callId: this.callId });
+      return;
+    }
     if (!this.remoteDescriptionSet) {
+      callDebug("webrtc.remoteIce.buffered", {
+        callId: this.callId,
+        line: summarizeIceCandidate(candidate),
+        bufferLen: this.pendingRemoteIce.length + 1,
+      });
       this.pendingRemoteIce.push(candidate);
       return;
     }
     try {
       await this.pc.addIceCandidate(candidate);
+      callDebug("webrtc.remoteIce.added", { callId: this.callId, line: summarizeIceCandidate(candidate) });
     } catch (err) {
-      console.warn("Failed to add ICE candidate", err);
+      callDebugWarn("webrtc.remoteIce.addFailed", { callId: this.callId, err: String(err), line: summarizeIceCandidate(candidate) });
     }
   }
 
   private async drainPendingIce(): Promise<void> {
     const pending = this.pendingRemoteIce.splice(0);
+    if (pending.length) {
+      callDebug("webrtc.remoteIce.drain", { callId: this.callId, count: pending.length });
+    }
     for (const cand of pending) {
       try {
         await this.pc.addIceCandidate(cand);
       } catch (err) {
-        console.warn("Failed to add buffered ICE candidate", err);
+        callDebugWarn("webrtc.remoteIce.drainFailed", { callId: this.callId, err: String(err) });
       }
     }
   }
@@ -215,6 +368,11 @@ export class CallSession {
 
   hangup(): void {
     if (this.closed) return;
+    callDebug("webrtc.hangup", {
+      callId: this.callId,
+      connectionState: this.pc.connectionState,
+      iceConnectionState: this.pc.iceConnectionState,
+    });
     this.closed = true;
     try {
       this.pc.getSenders().forEach((s) => s.track?.stop());
@@ -240,13 +398,20 @@ export function getActiveSession(): CallSession | null {
 }
 
 export function startSession(callId: string): CallSession {
-  if (activeSession) activeSession.hangup();
+  if (activeSession) {
+    callDebugWarn("webrtc.startSession.replacing", {
+      previousCallId: activeSession.callId,
+      nextCallId: callId,
+    });
+    activeSession.hangup();
+  }
   activeSession = new CallSession(callId);
   return activeSession;
 }
 
 export function clearSession(): void {
   if (activeSession) {
+    callDebug("webrtc.clearSession", { callId: activeSession.callId });
     activeSession.hangup();
     activeSession = null;
   }

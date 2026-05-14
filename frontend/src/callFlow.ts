@@ -1,3 +1,4 @@
+import { callDebug, callDebugWarn } from "./callDebug";
 import { api } from "./api";
 import { useAppStore } from "./store";
 import type { OnlineUser, PublicUser, SignalingIncoming } from "./types";
@@ -25,7 +26,16 @@ export async function refreshDirectory(): Promise<void> {
   }
 }
 
-function endCallLocally(): void {
+function endCallLocally(reason: string): void {
+  const ac = useAppStore.getState().activeCall;
+  const inc = useAppStore.getState().incomingCall;
+  callDebug("callFlow.endCallLocally", {
+    reason,
+    activeCallId: ac?.callId ?? null,
+    activeRole: ac?.role ?? null,
+    activeStatus: ac?.status ?? null,
+    incomingCallId: inc?.callId ?? null,
+  });
   clearSession();
   useAppStore.getState().setActiveCall(null);
   useAppStore.getState().setIncomingCall(null);
@@ -43,7 +53,7 @@ async function handleIncomingOffer(
     } catch (err) {
       console.error("Local media failed", err);
       signaling.send({ type: "call_end", call_id: callId });
-      endCallLocally();
+      endCallLocally("incoming_offer_local_media_failed");
       return;
     }
   }
@@ -69,6 +79,7 @@ export function installCallFlow(): () => void {
 
       case "incoming_call":
         if (useAppStore.getState().activeCall || useAppStore.getState().incomingCall) {
+          callDebugWarn("callFlow.incoming_call.busy_decline", { call_id: msg.call_id });
           signaling.send({ type: "call_decline", call_id: msg.call_id });
           break;
         }
@@ -106,7 +117,15 @@ export function installCallFlow(): () => void {
       case "call_accepted":
         {
           const call = useAppStore.getState().activeCall;
-          if (!call || call.callId !== msg.call_id || call.role !== "caller") break;
+          if (!call || call.callId !== msg.call_id || call.role !== "caller") {
+            callDebugWarn("callFlow.call_accepted.ignored", {
+              msgCallId: msg.call_id,
+              activeCallId: call?.callId,
+              role: call?.role,
+            });
+            break;
+          }
+          callDebug("callFlow.call_accepted", { callId: msg.call_id, by_user_id: msg.by_user_id });
           useAppStore.getState().updateActiveCall({ status: "connecting" });
           let session = getActiveSession();
           if (!session || session.callId !== call.callId) {
@@ -116,7 +135,7 @@ export function installCallFlow(): () => void {
             } catch (err) {
               console.error("Local media failed", err);
               signaling.send({ type: "call_end", call_id: call.callId });
-              endCallLocally();
+              endCallLocally("caller_local_media_failed");
               break;
             }
           }
@@ -125,14 +144,22 @@ export function installCallFlow(): () => void {
         break;
 
       case "call_active":
-        // caller-side ack from server when callee accepted — handled by call_accepted above
+        callDebug("callFlow.call_active", { callId: msg.call_id, peer_user_id: msg.peer_user_id });
         break;
 
       case "call_declined":
+        endCallLocally(`server:call_declined:by=${msg.by_user_id}`);
+        break;
       case "call_missed":
+        endCallLocally("server:call_missed");
+        break;
       case "call_cancelled":
+        endCallLocally("server:call_cancelled");
+        break;
       case "call_ended":
-        endCallLocally();
+        endCallLocally(
+          `server:call_ended:reason=${msg.reason ?? "?"}:by=${msg.by_user_id ?? "?"}`,
+        );
         break;
 
       case "offer":
@@ -158,8 +185,8 @@ export function installCallFlow(): () => void {
         break;
 
       case "error":
-        console.warn("Signaling error:", msg.message);
-        if (msg.call_id) endCallLocally();
+        callDebugWarn("callFlow.server_error", { message: msg.message, call_id: msg.call_id });
+        if (msg.call_id) endCallLocally(`server_error:${msg.message}`);
         break;
 
       case "pong":
@@ -168,6 +195,7 @@ export function installCallFlow(): () => void {
   });
 
   const offConn = signaling.onConnection((connected) => {
+    callDebug("callFlow.ws.socket", { connected });
     useAppStore.getState().setWsConnected(connected);
     if (connected) void refreshDirectory();
   });
@@ -180,6 +208,7 @@ export function installCallFlow(): () => void {
 
 export async function placeCall(targetUserId: number): Promise<void> {
   if (useAppStore.getState().activeCall) return;
+  callDebug("callFlow.placeCall", { targetUserId });
   signaling.send({ type: "call_invite", target_user_id: targetUserId });
 }
 
@@ -187,11 +216,12 @@ export async function acceptIncomingCall(): Promise<void> {
   const incoming = useAppStore.getState().incomingCall;
   if (!incoming) return;
 
+  callDebug("callFlow.acceptIncomingCall", { callId: incoming.callId });
   const session = startSession(incoming.callId);
   try {
     await session.startLocalMedia();
   } catch (err) {
-    console.error("Local media failed", err);
+    callDebugWarn("callFlow.acceptIncomingCall.local_media_failed", { err: String(err) });
     signaling.send({ type: "call_decline", call_id: incoming.callId });
     useAppStore.getState().setIncomingCall(null);
     clearSession();
@@ -213,6 +243,7 @@ export async function acceptIncomingCall(): Promise<void> {
 export function declineIncomingCall(): void {
   const incoming = useAppStore.getState().incomingCall;
   if (!incoming) return;
+  callDebug("callFlow.declineIncomingCall", { callId: incoming.callId });
   signaling.send({ type: "call_decline", call_id: incoming.callId });
   useAppStore.getState().setIncomingCall(null);
 }
@@ -220,7 +251,8 @@ export function declineIncomingCall(): void {
 export function hangUp(): void {
   const call = useAppStore.getState().activeCall;
   if (call) {
+    callDebug("callFlow.hangUp.user", { callId: call.callId });
     signaling.send({ type: "call_end", call_id: call.callId });
   }
-  endCallLocally();
+  endCallLocally("user_hangUp");
 }
