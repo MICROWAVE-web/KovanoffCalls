@@ -33,6 +33,33 @@ class OnlineUser(UserPublic):
     last_seen: datetime | None = None
 
 
+class ExternalPeer(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    telegram_id: int
+    username: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    name: str = Field(default="")
+
+    @classmethod
+    def from_row(cls, row: object) -> "ExternalPeer":
+        return cls(
+            telegram_id=getattr(row, "peer_telegram_id"),
+            username=getattr(row, "username"),
+            first_name=getattr(row, "first_name"),
+            last_name=getattr(row, "last_name"),
+            name=getattr(row, "display_name"),
+        )
+
+
+class UserDirectoryResponse(BaseModel):
+    online: list[OnlineUser]
+    offline: list[OnlineUser]
+    external: list[ExternalPeer]
+    telegram_bot_username: str | None = None
+
+
 class TelegramAuthRequest(BaseModel):
     initData: str
 

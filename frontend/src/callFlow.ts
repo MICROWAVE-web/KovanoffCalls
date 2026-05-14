@@ -4,14 +4,24 @@ import type { OnlineUser, PublicUser, SignalingIncoming } from "./types";
 import { signaling } from "./websocket";
 import { clearSession, getActiveSession, startSession } from "./webrtc";
 
-async function refreshOnlineUsers(): Promise<void> {
+let directoryDebounce: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleDirectoryRefresh(): void {
+  if (directoryDebounce) clearTimeout(directoryDebounce);
+  directoryDebounce = setTimeout(() => {
+    directoryDebounce = null;
+    void refreshDirectory();
+  }, 400);
+}
+
+export async function refreshDirectory(): Promise<void> {
   const { jwt } = useAppStore.getState();
   if (!jwt) return;
   try {
-    const list = await api.onlineUsers(jwt);
-    useAppStore.getState().setOnlineUsers(list);
+    const data = await api.userDirectory(jwt);
+    useAppStore.getState().setDirectory(data);
   } catch (err) {
-    console.warn("Failed to refresh online users", err);
+    console.warn("Failed to refresh user directory", err);
   }
 }
 
@@ -44,7 +54,7 @@ export function installCallFlow(): () => void {
   const offSignaling = signaling.on(async (msg: SignalingIncoming) => {
     switch (msg.type) {
       case "hello":
-        await refreshOnlineUsers();
+        await refreshDirectory();
         break;
 
       case "presence":
@@ -54,6 +64,7 @@ export function installCallFlow(): () => void {
         } else {
           useAppStore.getState().removeOnlineUser(msg.user_id);
         }
+        scheduleDirectoryRefresh();
         break;
 
       case "incoming_call":
@@ -158,7 +169,7 @@ export function installCallFlow(): () => void {
 
   const offConn = signaling.onConnection((connected) => {
     useAppStore.getState().setWsConnected(connected);
-    if (connected) void refreshOnlineUsers();
+    if (connected) void refreshDirectory();
   });
 
   return () => {
@@ -214,4 +225,4 @@ export function hangUp(): void {
   endCallLocally();
 }
 
-export { refreshOnlineUsers };
+export { refreshDirectory };

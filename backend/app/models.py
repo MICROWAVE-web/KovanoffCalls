@@ -46,6 +46,36 @@ class User(Base):
         return f"User #{self.id}"
 
 
+class UserSharedPeer(Base):
+    """Telegram peers explicitly shared with the bot by a registered user (owner)."""
+
+    __tablename__ = "user_shared_peers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    peer_telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    @property
+    def display_name(self) -> str:
+        parts = [p for p in (self.first_name, self.last_name) if p]
+        if parts:
+            return " ".join(parts)
+        if self.username:
+            return f"@{self.username}"
+        return f"Telegram #{self.peer_telegram_id}"
+
+
 class Call(Base):
     __tablename__ = "calls"
 

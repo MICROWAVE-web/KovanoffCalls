@@ -56,7 +56,7 @@ ALLOWED_ORIGINS=https://app.ngrok.app
 
 ```bash
 cp .env.example .env
-# fill BOT_TOKEN, WEBAPP_URL, JWT_SECRET, and the VITE_* URLs
+# fill BOT_TOKEN, BOT_USERNAME, WEBAPP_URL, JWT_SECRET, and the VITE_* URLs
 ```
 
 ## 4. Run
@@ -67,7 +67,7 @@ docker compose up --build
 
 - Postgres on `localhost:5432`
 - Redis on `localhost:6379`
-- Backend on `localhost:8000` (`/health`, `POST /auth/telegram`, `GET /users/online`, `WS /ws`)
+- Backend on `localhost:8000` (`/health`, `POST /auth/telegram`, `GET /users/online`, `GET /users/directory`, `WS /ws`)
 - Frontend on `localhost:5173`
 - Bot service runs aiogram polling
 
@@ -76,16 +76,23 @@ The backend container runs `alembic upgrade head` on start to apply migrations.
 ## 5. Try a call
 
 1. Open your bot in Telegram, send `/start`, tap **Open Calls**.
-2. The Mini App auto-authenticates via `initData` and shows online users.
+2. The Mini App auto-authenticates via `initData` and shows **People**: online, registered offline, and Telegram contacts you added via the bot (see below).
 3. Open the same bot from a second Telegram account (different device or Telegram Desktop with a different account) and launch the app.
 4. Tap **Call** on the other user — the recipient sees the incoming-call modal.
 5. Accept → WebRTC offer/answer + ICE negotiate → video starts.
 6. Use the controls at the bottom: mute, camera off, switch camera, end call.
 
+## People directory and Telegram contacts
+
+- **`GET /users/directory`** returns three lists for the current user: `online` (Redis presence), `offline` (other registered users not online), and `external` (rows in `user_shared_peers` whose `peer_telegram_id` is not yet in `users`).
+- Set **`BOT_USERNAME`** in `.env` (the bot’s `@name` without `@`). The API includes it as `telegram_bot_username` so the Mini App can open `t.me/...` links. You may also set **`VITE_TELEGRAM_BOT_USERNAME`** at frontend build time as a fallback.
+- **Add contacts**: in the app tap **Add from Telegram** — you are sent to the bot with `?start=addcontacts`. The bot shows buttons using **`KeyboardButtonRequestUsers`** (pick up to 10 Telegram users) and **`request_contact`** (when the shared contact has a Telegram `user_id`). Shared rows are stored in Postgres; return to the mini app and **Refresh**.
+- **Invite** (not in app): **Invite** opens Telegram’s share dialog with a link to your bot so the peer can register.
+
 ## Architecture notes
 
 - **Telegram auth**: `POST /auth/telegram` verifies `initData` per the Telegram WebApp spec (`HMAC_SHA256` with `secret_key = HMAC_SHA256("WebAppData", BOT_TOKEN)`), upserts the user, and returns a JWT (HS256, 7-day expiry by default).
-- **Presence**: each connected WS sets `presence:user:{id}=1` in Redis with TTL `PRESENCE_TTL_SECONDS` (refreshed periodically). `GET /users/online` scans `presence:user:*` and joins with the `users` table.
+- **Presence**: each connected WS sets `presence:user:{id}=1` in Redis with TTL `PRESENCE_TTL_SECONDS` (refreshed periodically). `GET /users/online` and the `online` section of `GET /users/directory` use the same presence scan joined with `users`.
 - **Signaling**: a single `/ws?token=<JWT>` endpoint handles `call_invite`, `call_accept`, `call_decline`, `offer`, `answer`, `ice_candidate`, and `call_end`. Calls are persisted in Postgres (`pending → active → ended | declined | missed`). A ring-timeout watcher (`RING_TIMEOUT_SECONDS`) marks unanswered invites as `missed`.
 - **Offline notifications**: when the callee has no active WS, the API publishes a JSON message to the Redis pub/sub channel `bot:notifications`. The `bot` service subscribes and sends a Telegram message with an inline WebApp button so the user can open the mini app and answer.
 - **WebRTC**: native `RTCPeerConnection` with Google's public STUN. The caller creates the offer after `call_accept`; the callee creates the answer on receiving the offer. ICE candidates are exchanged over the signaling WS.
@@ -105,7 +112,7 @@ The backend container runs `alembic upgrade head` on start to apply migrations.
 cd backend
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-# set DATABASE_URL, REDIS_URL, BOT_TOKEN, WEBAPP_URL, JWT_SECRET in env
+# set DATABASE_URL, REDIS_URL, BOT_TOKEN, BOT_USERNAME, WEBAPP_URL, JWT_SECRET in env
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 

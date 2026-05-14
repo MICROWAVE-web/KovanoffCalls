@@ -12,6 +12,21 @@ export interface OnlineUser extends PublicUser {
   last_seen: string | null;
 }
 
+export interface ExternalPeer {
+  telegram_id: number;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  name: string;
+}
+
+export interface UserDirectory {
+  online: OnlineUser[];
+  offline: OnlineUser[];
+  external: ExternalPeer[];
+  telegram_bot_username: string | null;
+}
+
 export type CallStatus = "ringing" | "incoming" | "connecting" | "active" | "ended";
 
 export interface ActiveCall {

@@ -3,47 +3,172 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any
+from datetime import datetime, timezone
 
-from aiogram import Bot, Dispatcher
-from aiogram.filters import CommandStart
+from aiogram import Bot, Dispatcher, F
+from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import (
+    Contact,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
+    KeyboardButtonRequestUsers,
     Message,
     ReplyKeyboardMarkup,
+    UsersShared,
     WebAppInfo,
 )
 from redis.asyncio import Redis, from_url
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.config import get_settings
+from app.db import SessionLocal
+from app.models import User, UserSharedPeer
 from app.notifications import NOTIFICATIONS_CHANNEL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("bot")
+
+REQUEST_USERS_ID = 1
+
+
+def _add_contacts_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="Choose people (Telegram)",
+                    request_users=KeyboardButtonRequestUsers(
+                        request_id=REQUEST_USERS_ID,
+                        user_is_bot=False,
+                        max_quantity=10,
+                        request_name=True,
+                        request_username=True,
+                    ),
+                )
+            ],
+            [KeyboardButton(text="Share phone contact", request_contact=True)],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+    )
+
+
+async def _upsert_shared_peers(
+    owner_id: int,
+    rows: list[tuple[int, str | None, str | None, str | None]],
+) -> None:
+    now = datetime.now(timezone.utc)
+    async with SessionLocal() as session:
+        for peer_tid, fn, ln, un in rows:
+            stmt = (
+                pg_insert(UserSharedPeer)
+                .values(
+                    owner_user_id=owner_id,
+                    peer_telegram_id=peer_tid,
+                    first_name=fn,
+                    last_name=ln,
+                    username=un,
+                    created_at=now,
+                    updated_at=now,
+                )
+                .on_conflict_do_update(
+                    index_elements=["owner_user_id", "peer_telegram_id"],
+                    set_={
+                        "first_name": fn,
+                        "last_name": ln,
+                        "username": un,
+                        "updated_at": now,
+                    },
+                )
+            )
+            await session.execute(stmt)
+        await session.commit()
+
+
+async def _resolve_owner(telegram_user_id: int) -> User | None:
+    async with SessionLocal() as session:
+        return await session.scalar(select(User).where(User.telegram_id == telegram_user_id))
 
 
 def build_dispatcher(webapp_url: str) -> Dispatcher:
     dp = Dispatcher()
 
     @dp.message(CommandStart())
-    async def on_start(message: Message) -> None:
+    async def on_start(message: Message, command: CommandObject) -> None:
         reply_kb = ReplyKeyboardMarkup(
             keyboard=[
                 [KeyboardButton(text="Open Calls", web_app=WebAppInfo(url=webapp_url))]
             ],
             resize_keyboard=True,
         )
+        arg = (command.args or "").strip()
+        if arg == "addcontacts":
+            await message.answer(
+                "Pick up to 10 people to add to your Calls directory, "
+                "or share a phone contact if that person is on Telegram.",
+                reply_markup=_add_contacts_keyboard(),
+            )
+            return
         await message.answer(
             "Welcome to Kovanoff Calls. Tap the button below to launch the app.",
             reply_markup=reply_kb,
         )
 
+    @dp.message(F.users_shared)
+    async def on_users_shared(message: Message) -> None:
+        if message.from_user is None:
+            return
+        us: UsersShared | None = message.users_shared
+        if us is None or not us.users:
+            return
+        owner = await _resolve_owner(message.from_user.id)
+        if owner is None:
+            await message.answer("Open the Calls mini app once to register, then try again.")
+            return
+        rows: list[tuple[int, str | None, str | None, str | None]] = []
+        for su in us.users:
+            rows.append((su.user_id, su.first_name, su.last_name, su.username))
+        await _upsert_shared_peers(owner.id, rows)
+        await message.answer(
+            f"Saved {len(rows)} contact(s). Return to the mini app and refresh the list.",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="Open Calls", web_app=WebAppInfo(url=webapp_url))]],
+                resize_keyboard=True,
+            ),
+        )
+
+    @dp.message(F.contact)
+    async def on_contact_shared(message: Message) -> None:
+        if message.from_user is None or message.contact is None:
+            return
+        c: Contact = message.contact
+        if c.user_id is None:
+            await message.answer(
+                "This contact has no Telegram user id. Use “Choose people” to pick Telegram users."
+            )
+            return
+        owner = await _resolve_owner(message.from_user.id)
+        if owner is None:
+            await message.answer("Open the Calls mini app once to register, then try again.")
+            return
+        await _upsert_shared_peers(
+            owner.id,
+            [(c.user_id, c.first_name, c.last_name, None)],
+        )
+        await message.answer(
+            "Contact saved. Return to the mini app and refresh the list.",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="Open Calls", web_app=WebAppInfo(url=webapp_url))]],
+                resize_keyboard=True,
+            ),
+        )
+
     return dp
 
 
-def _build_incoming_call_message(payload: dict[str, Any], webapp_url: str) -> tuple[str, InlineKeyboardMarkup]:
+def _build_incoming_call_message(payload: dict, webapp_url: str) -> tuple[str, InlineKeyboardMarkup]:
     caller_name = payload.get("caller_name") or "Someone"
     target_url = payload.get("webapp_url") or webapp_url
     text = f"Incoming call from {caller_name}. Tap to answer."

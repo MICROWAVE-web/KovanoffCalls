@@ -1,4 +1,4 @@
-import type { OnlineUser, PublicUser } from "./types";
+import type { OnlineUser, PublicUser, UserDirectory } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -49,4 +49,6 @@ export const api = {
   me: (token: string) => request<PublicUser>("/users/me", { method: "GET" }, token),
   onlineUsers: (token: string) =>
     request<OnlineUser[]>("/users/online", { method: "GET" }, token),
+  userDirectory: (token: string) =>
+    request<UserDirectory>("/users/directory", { method: "GET" }, token),
 };

@@ -5,7 +5,15 @@ import type {
   MediaState,
   OnlineUser,
   PublicUser,
+  UserDirectory,
 } from "./types";
+
+const emptyDirectory = (): UserDirectory => ({
+  online: [],
+  offline: [],
+  external: [],
+  telegram_bot_username: null,
+});
 
 interface AppState {
   jwt: string | null;
@@ -16,6 +24,7 @@ interface AppState {
   wsConnected: boolean;
 
   onlineUsers: OnlineUser[];
+  directory: UserDirectory;
 
   incomingCall: IncomingCall | null;
   activeCall: ActiveCall | null;
@@ -32,6 +41,7 @@ interface AppState {
   setWsConnected: (connected: boolean) => void;
 
   setOnlineUsers: (users: OnlineUser[]) => void;
+  setDirectory: (directory: UserDirectory) => void;
   upsertOnlineUser: (user: OnlineUser) => void;
   removeOnlineUser: (userId: number) => void;
 
@@ -53,6 +63,7 @@ export const useAppStore = create<AppState>((set) => ({
   wsConnected: false,
 
   onlineUsers: [],
+  directory: emptyDirectory(),
 
   incomingCall: null,
   activeCall: null,
@@ -69,6 +80,7 @@ export const useAppStore = create<AppState>((set) => ({
       jwt: null,
       user: null,
       onlineUsers: [],
+      directory: emptyDirectory(),
       incomingCall: null,
       activeCall: null,
       wsConnected: false,
@@ -77,6 +89,11 @@ export const useAppStore = create<AppState>((set) => ({
   setWsConnected: (wsConnected) => set({ wsConnected }),
 
   setOnlineUsers: (onlineUsers) => set({ onlineUsers }),
+  setDirectory: (directory) =>
+    set({
+      directory,
+      onlineUsers: directory.online,
+    }),
   upsertOnlineUser: (user) =>
     set((state) => {
       const others = state.onlineUsers.filter((u) => u.id !== user.id);

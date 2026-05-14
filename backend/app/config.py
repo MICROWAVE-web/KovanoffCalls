@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     )
 
     bot_token: str = Field(..., alias="BOT_TOKEN")
+    """Bot @username without @; used for t.me links from API/Mini App."""
+    bot_username: str = Field("", alias="BOT_USERNAME")
     webapp_url: str = Field(..., alias="WEBAPP_URL")
 
     jwt_secret: str = Field(..., alias="JWT_SECRET")

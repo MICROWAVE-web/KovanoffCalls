@@ -32,6 +32,8 @@ interface TelegramWebApp {
   close: () => void;
   enableClosingConfirmation: () => void;
   disableClosingConfirmation: () => void;
+  openTelegramLink?: (url: string) => void;
+  openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
   HapticFeedback?: {
     impactOccurred: (style: "light" | "medium" | "heavy" | "rigid" | "soft") => void;
     notificationOccurred: (type: "error" | "success" | "warning") => void;
@@ -68,4 +70,15 @@ export function getInitData(): string {
 
 export function getTelegramUser(): TelegramWebAppUser | null {
   return getTelegramWebApp()?.initDataUnsafe?.user ?? null;
+}
+
+/** Opens t.me / tg links inside Telegram when available. */
+export function openTelegramLink(url: string): void {
+  const tg = getTelegramWebApp();
+  const fn = tg?.openTelegramLink;
+  if (typeof fn === "function") {
+    fn.call(tg, url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
