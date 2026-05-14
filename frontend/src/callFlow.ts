@@ -224,5 +224,3 @@ export function hangUp(): void {
   }
   endCallLocally();
 }
-
-export { refreshDirectory };
