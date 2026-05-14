@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAppStore } from "./store";
-import { bootstrapAuth } from "./auth";
+import { bootstrapAuth, retryAuth } from "./auth";
 import { initTelegram } from "./telegram";
 import { signaling } from "./websocket";
 import { installCallFlow } from "./callFlow";
@@ -32,12 +32,23 @@ export function App() {
 
   if (authError) {
     const w = window as unknown as {
-      Telegram?: { WebApp?: { initData?: string; version?: string; platform?: string } };
+      Telegram?: {
+        WebApp?: {
+          initData?: string;
+          version?: string;
+          platform?: string;
+          initDataUnsafe?: { user?: { id?: number }; auth_date?: number };
+        };
+      };
     };
+    const unsafe = w.Telegram?.WebApp?.initDataUnsafe;
     const debug = {
       hasWindowTelegram: Boolean(w.Telegram),
       hasWebApp: Boolean(w.Telegram?.WebApp),
       initDataLen: (w.Telegram?.WebApp?.initData ?? "").length,
+      initDataUnsafeHasUser: Boolean(unsafe?.user),
+      initDataUnsafeUserId: unsafe?.user?.id ?? null,
+      initDataUnsafeAuthDate: unsafe?.auth_date ?? null,
       version: w.Telegram?.WebApp?.version ?? null,
       platform: w.Telegram?.WebApp?.platform ?? null,
       href: window.location.href,
@@ -49,6 +60,14 @@ export function App() {
         <div className="max-w-sm w-full">
           <h2 className="text-lg font-semibold text-red-600">Authentication failed</h2>
           <p className="mt-2 text-sm text-slate-600">{authError}</p>
+          <button
+            type="button"
+            className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            disabled={authLoading}
+            onClick={() => void retryAuth()}
+          >
+            Retry
+          </button>
           <pre className="mt-4 text-left text-xs bg-slate-100 rounded p-3 overflow-auto whitespace-pre-wrap break-all">
             {JSON.stringify(debug, null, 2)}
           </pre>
