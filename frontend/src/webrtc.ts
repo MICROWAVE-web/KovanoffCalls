@@ -140,7 +140,7 @@ export class CallSession {
     await this.logConnectivitySnapshot(`mediaFailure:${reason}`);
     callDebugWarn("webrtc.mediaFailure.end", { reason, callId: this.callId });
     try {
-      signaling.send({ type: "call_end", call_id: this.callId });
+      signaling.send({ type: "call_end", call_id: this.callId, reason: `webrtc:${reason}` });
     } catch {
       // ignore
     }

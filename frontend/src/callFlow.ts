@@ -52,7 +52,11 @@ async function handleIncomingOffer(
       await session.startLocalMedia();
     } catch (err) {
       console.error("Local media failed", err);
-      signaling.send({ type: "call_end", call_id: callId });
+      signaling.send({
+        type: "call_end",
+        call_id: callId,
+        reason: "callee_local_media_failed_on_offer",
+      });
       endCallLocally("incoming_offer_local_media_failed");
       return;
     }
@@ -134,7 +138,11 @@ export function installCallFlow(): () => void {
               await session.startLocalMedia();
             } catch (err) {
               console.error("Local media failed", err);
-              signaling.send({ type: "call_end", call_id: call.callId });
+              signaling.send({
+                type: "call_end",
+                call_id: call.callId,
+                reason: "caller_local_media_failed_after_accept",
+              });
               endCallLocally("caller_local_media_failed");
               break;
             }
@@ -252,7 +260,7 @@ export function hangUp(): void {
   const call = useAppStore.getState().activeCall;
   if (call) {
     callDebug("callFlow.hangUp.user", { callId: call.callId });
-    signaling.send({ type: "call_end", call_id: call.callId });
+    signaling.send({ type: "call_end", call_id: call.callId, reason: "user_hangup" });
   }
   endCallLocally("user_hangUp");
 }

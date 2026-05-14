@@ -374,6 +374,13 @@ async def _handle_call_end(
         await _send_error(ws, "invalid call_id")
         return
 
+    raw_reason = payload.get("reason")
+    client_reason: str | None = None
+    if isinstance(raw_reason, str):
+        s = raw_reason.strip()
+        if s:
+            client_reason = s[:200]
+
     async with SessionLocal() as session:
         call = await calls_service.get_call(session, call_id)
         if call is None:
@@ -390,14 +397,21 @@ async def _handle_call_end(
     sessions.remove(user.id, call_id)
     sessions.remove(peer_id, call_id)
 
-    await manager.send_to_user(
-        peer_id, {"type": "call_ended", "call_id": str(call_id), "by_user_id": user.id}
-    )
+    peer_msg: dict[str, Any] = {
+        "type": "call_ended",
+        "call_id": str(call_id),
+        "by_user_id": user.id,
+    }
+    if client_reason:
+        peer_msg["reason"] = client_reason
+
+    await manager.send_to_user(peer_id, peer_msg)
     logger.info(
-        "signaling call_end call_id=%s ended_by_user=%s peer_id=%s",
+        "signaling call_end call_id=%s ended_by_user=%s peer_id=%s client_reason=%s",
         call_id,
         user.id,
         peer_id,
+        client_reason or "-",
     )
 
 

@@ -56,7 +56,7 @@ export type SignalingOutgoing =
   | { type: "offer"; call_id: string; sdp: RTCSessionDescriptionInit }
   | { type: "answer"; call_id: string; sdp: RTCSessionDescriptionInit }
   | { type: "ice_candidate"; call_id: string; candidate: RTCIceCandidateInit | null }
-  | { type: "call_end"; call_id: string };
+  | { type: "call_end"; call_id: string; reason?: string };
 
 export interface ServerHello {
   type: "hello";

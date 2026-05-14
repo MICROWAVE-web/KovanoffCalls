@@ -18,8 +18,13 @@ function summarizeOutgoing(msg: SignalingOutgoing): Record<string, unknown> {
       return { type: msg.type, target_user_id: msg.target_user_id };
     case "call_accept":
     case "call_decline":
-    case "call_end":
       return { type: msg.type, call_id: msg.call_id };
+    case "call_end":
+      return {
+        type: msg.type,
+        call_id: msg.call_id,
+        ...(msg.reason ? { reason: msg.reason } : {}),
+      };
     case "offer":
     case "answer":
       return { type: msg.type, call_id: msg.call_id, sdp: summarizeSdp(msg.sdp) };
