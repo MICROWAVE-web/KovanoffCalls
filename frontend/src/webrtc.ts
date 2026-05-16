@@ -246,9 +246,16 @@ export class CallSession {
     return stream;
   }
 
+  private wantsVideo(): boolean {
+    return (this.localStream?.getVideoTracks().length ?? 0) > 0;
+  }
+
   async createOffer(): Promise<void> {
     callDebug("webrtc.createOffer.begin", { callId: this.callId });
-    const offer = await this.pc.createOffer();
+    const offer = await this.pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: this.wantsVideo(),
+    });
     await this.pc.setLocalDescription(offer);
     callDebug("webrtc.createOffer.sent", {
       callId: this.callId,
@@ -262,7 +269,10 @@ export class CallSession {
     await this.pc.setRemoteDescription(sdp);
     this.remoteDescriptionSet = true;
     await this.drainPendingIce();
-    const answer = await this.pc.createAnswer();
+    const answer = await this.pc.createAnswer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: this.wantsVideo(),
+    });
     await this.pc.setLocalDescription(answer);
     callDebug("webrtc.handleRemoteOffer.answer", { callId: this.callId, sdp: summarizeSdp(answer) });
     signaling.send({ type: "answer", call_id: this.callId, sdp: answer });

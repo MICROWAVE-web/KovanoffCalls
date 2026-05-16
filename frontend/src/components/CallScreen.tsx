@@ -68,11 +68,33 @@ export function CallScreen() {
     }
   }, [localStream]);
 
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     if (remoteRef.current && remoteStream) {
       remoteRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
+
+  const playRemoteAudio = () => {
+    const el = remoteAudioRef.current;
+    if (!el || !remoteStream || isVideo) return;
+    el.srcObject = remoteStream;
+    void el.play().catch((err) => {
+      console.warn("Remote audio play failed", err);
+    });
+  };
+
+  useEffect(() => {
+    playRemoteAudio();
+  }, [remoteStream, isVideo]);
+
+  useEffect(() => {
+    if (!remoteStream || isVideo) return undefined;
+    const onTrack = () => playRemoteAudio();
+    remoteStream.addEventListener("addtrack", onTrack);
+    return () => remoteStream.removeEventListener("addtrack", onTrack);
+  }, [remoteStream, isVideo]);
 
   const timer = useCallTimer(activeCall?.startedAt ?? null);
 
@@ -90,6 +112,7 @@ export function CallScreen() {
   if (!isVideo) {
     return (
       <div className="fixed inset-0 z-30 bg-gradient-to-b from-slate-800 to-slate-950 text-white flex flex-col items-center justify-center">
+        <audio ref={remoteAudioRef} autoPlay playsInline className="sr-only" />
         <div className="absolute top-0 inset-x-0 pt-6 px-5 flex flex-col items-center pointer-events-none">
           <CallAvatar name={activeCall.peer.name} photoUrl={activeCall.peer.photo_url} />
           <div className="text-lg font-medium mt-4 drop-shadow">{activeCall.peer.name}</div>
