@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -187,15 +187,20 @@ async def decline_friend_request(
     )
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
 async def remove_friend(
     user_id: int,
     current: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> None:
+) -> Response:
     removed = await friends_service.remove_friendship(session, current.id, user_id)
     if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Дружба не найдена",
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
