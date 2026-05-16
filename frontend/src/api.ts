@@ -1,4 +1,9 @@
-import type { OnlineUser, PublicUser, UserDirectory } from "./types";
+import type {
+  FriendsDirectory,
+  OnlineUser,
+  PublicUser,
+  UserSearchResult,
+} from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -49,6 +54,33 @@ export const api = {
   me: (token: string) => request<PublicUser>("/users/me", { method: "GET" }, token),
   onlineUsers: (token: string) =>
     request<OnlineUser[]>("/users/online", { method: "GET" }, token),
-  userDirectory: (token: string) =>
-    request<UserDirectory>("/users/directory", { method: "GET" }, token),
+  friendsDirectory: (token: string) =>
+    request<FriendsDirectory>("/friends/directory", { method: "GET" }, token),
+  searchUsers: (token: string, q: string, limit = 20) =>
+    request<{ results: UserSearchResult[] }>(
+      `/users/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+      { method: "GET" },
+      token,
+    ),
+  sendFriendRequest: async (token: string, userId: number): Promise<void> => {
+    await request<{ id: number; status: string }>(
+      "/friends/request",
+      { method: "POST", body: JSON.stringify({ user_id: userId }) },
+      token,
+    );
+  },
+  acceptFriendRequest: (token: string, requestId: number) =>
+    request<{ id: number; status: string }>(
+      `/friends/requests/${requestId}/accept`,
+      { method: "POST" },
+      token,
+    ),
+  declineFriendRequest: (token: string, requestId: number) =>
+    request<{ id: number; status: string }>(
+      `/friends/requests/${requestId}/decline`,
+      { method: "POST" },
+      token,
+    ),
+  removeFriend: (token: string, userId: number) =>
+    request<void>(`/friends/${userId}`, { method: "DELETE" }, token),
 };

@@ -18,6 +18,7 @@ from app.redis_presence import close_presence, init_presence
 from app.schemas import TelegramAuthRequest, TelegramAuthResponse, UserPublic
 from app.signaling import router as signaling_router
 from app.telegram_auth import TelegramAuthError, verify_init_data
+from app.friends import router as friends_router
 from app.users import router as users_router
 
 logging.basicConfig(level=logging.INFO)
@@ -92,4 +93,5 @@ async def auth_telegram(
 
 
 app.include_router(users_router)
+app.include_router(friends_router)
 app.include_router(signaling_router)

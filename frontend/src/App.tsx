@@ -4,7 +4,7 @@ import { bootstrapAuth, retryAuth } from "./auth";
 import { initTelegram } from "./telegram";
 import { signaling } from "./websocket";
 import { installCallFlow } from "./callFlow";
-import { UserList } from "./components/UserList";
+import { HomeScreen } from "./components/HomeScreen";
 import { IncomingCallModal } from "./components/IncomingCallModal";
 import { CallScreen } from "./components/CallScreen";
 import { PressableButton } from "./components/PressableButton";
@@ -89,7 +89,7 @@ export function App() {
 
   return (
     <div className="min-h-full">
-      <UserList />
+      <HomeScreen />
       {activeCall ? <CallScreen /> : null}
       <IncomingCallModal />
     </div>

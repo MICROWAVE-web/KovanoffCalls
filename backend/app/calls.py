@@ -6,17 +6,22 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Call, CallStatus
+from app.models import Call, CallMediaMode, CallStatus
 
 
 async def create_pending_call(
-    session: AsyncSession, caller_id: int, callee_id: int
+    session: AsyncSession,
+    caller_id: int,
+    callee_id: int,
+    *,
+    media_mode: CallMediaMode = CallMediaMode.video,
 ) -> Call:
     call = Call(
         id=uuid.uuid4(),
         caller_id=caller_id,
         callee_id=callee_id,
         status=CallStatus.pending,
+        media_mode=media_mode,
     )
     session.add(call)
     await session.commit()

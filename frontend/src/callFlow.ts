@@ -1,7 +1,7 @@
 import { callDebug, callDebugWarn } from "./callDebug";
 import { api } from "./api";
 import { useAppStore } from "./store";
-import type { OnlineUser, PublicUser, SignalingIncoming } from "./types";
+import type { CallMediaMode, OnlineUser, PublicUser, SignalingIncoming } from "./types";
 import { signaling } from "./websocket";
 import { clearSession, getActiveSession, startSession } from "./webrtc";
 
@@ -11,19 +11,40 @@ function scheduleDirectoryRefresh(): void {
   if (directoryDebounce) clearTimeout(directoryDebounce);
   directoryDebounce = setTimeout(() => {
     directoryDebounce = null;
-    void refreshDirectory();
+    void refreshFriendsDirectory();
   }, 400);
 }
 
-export async function refreshDirectory(): Promise<void> {
+export async function refreshFriendsDirectory(): Promise<void> {
   const { jwt } = useAppStore.getState();
   if (!jwt) return;
   try {
-    const data = await api.userDirectory(jwt);
-    useAppStore.getState().setDirectory(data);
+    const data = await api.friendsDirectory(jwt);
+    useAppStore.getState().setFriendsDirectory(data);
   } catch (err) {
-    console.warn("Failed to refresh user directory", err);
+    console.warn("Failed to refresh friends directory", err);
   }
+}
+
+/** @deprecated use refreshFriendsDirectory */
+export const refreshDirectory = refreshFriendsDirectory;
+
+function parseMediaMode(raw: string | undefined): CallMediaMode {
+  return raw === "audio" ? "audio" : "video";
+}
+
+function prepareMediaForCall(mode: CallMediaMode): void {
+  useAppStore.getState().setMediaState({
+    micOn: true,
+    camOn: mode === "video",
+    facing: "user",
+  });
+}
+
+function currentCallMediaMode(): CallMediaMode {
+  const call = useAppStore.getState().activeCall;
+  const incoming = useAppStore.getState().incomingCall;
+  return call?.mediaMode ?? incoming?.mediaMode ?? "video";
 }
 
 function endCallLocally(reason: string): void {
@@ -41,6 +62,13 @@ function endCallLocally(reason: string): void {
   useAppStore.getState().setIncomingCall(null);
 }
 
+async function startLocalMediaForActiveCall(): Promise<void> {
+  const mode = currentCallMediaMode();
+  const session = getActiveSession();
+  if (!session) return;
+  await session.startLocalMedia({ video: mode === "video" });
+}
+
 async function handleIncomingOffer(
   callId: string,
   sdp: RTCSessionDescriptionInit,
@@ -49,7 +77,7 @@ async function handleIncomingOffer(
   if (!session || session.callId !== callId) {
     session = startSession(callId);
     try {
-      await session.startLocalMedia();
+      await startLocalMediaForActiveCall();
     } catch (err) {
       console.error("Local media failed", err);
       signaling.send({
@@ -68,7 +96,7 @@ export function installCallFlow(): () => void {
   const offSignaling = signaling.on(async (msg: SignalingIncoming) => {
     switch (msg.type) {
       case "hello":
-        await refreshDirectory();
+        await refreshFriendsDirectory();
         break;
 
       case "presence":
@@ -87,69 +115,73 @@ export function installCallFlow(): () => void {
           signaling.send({ type: "call_decline", call_id: msg.call_id });
           break;
         }
-        useAppStore
-          .getState()
-          .setIncomingCall({ callId: msg.call_id, caller: msg.caller });
+        useAppStore.getState().setIncomingCall({
+          callId: msg.call_id,
+          caller: msg.caller,
+          mediaMode: parseMediaMode(msg.media_mode),
+        });
         break;
 
-      case "call_invited":
-        // server ack — find peer in online list for UI label
-        {
-          const peer =
-            useAppStore
-              .getState()
-              .onlineUsers.find((u) => u.id === msg.target_user_id) ?? null;
-          const fallback: PublicUser = peer ?? {
-            id: msg.target_user_id,
-            telegram_id: 0,
-            username: null,
-            first_name: null,
-            last_name: null,
-            photo_url: null,
-            name: `Пользователь №${msg.target_user_id}`,
-          };
-          useAppStore.getState().setActiveCall({
-            callId: msg.call_id,
-            peer: fallback,
-            role: "caller",
-            status: "ringing",
-            startedAt: null,
+      case "call_invited": {
+        const mediaMode = parseMediaMode(msg.media_mode);
+        prepareMediaForCall(mediaMode);
+        const peer =
+          useAppStore.getState().onlineUsers.find((u) => u.id === msg.target_user_id) ??
+          useAppStore
+            .getState()
+            .friendsDirectory.offline.find((u) => u.id === msg.target_user_id) ??
+          null;
+        const fallback: PublicUser = peer ?? {
+          id: msg.target_user_id,
+          telegram_id: 0,
+          username: null,
+          first_name: null,
+          last_name: null,
+          photo_url: null,
+          name: `Пользователь №${msg.target_user_id}`,
+        };
+        useAppStore.getState().setActiveCall({
+          callId: msg.call_id,
+          peer: fallback,
+          role: "caller",
+          status: "ringing",
+          startedAt: null,
+          mediaMode,
+        });
+        break;
+      }
+
+      case "call_accepted": {
+        const call = useAppStore.getState().activeCall;
+        if (!call || call.callId !== msg.call_id || call.role !== "caller") {
+          callDebugWarn("callFlow.call_accepted.ignored", {
+            msgCallId: msg.call_id,
+            activeCallId: call?.callId,
+            role: call?.role,
           });
+          break;
         }
-        break;
-
-      case "call_accepted":
-        {
-          const call = useAppStore.getState().activeCall;
-          if (!call || call.callId !== msg.call_id || call.role !== "caller") {
-            callDebugWarn("callFlow.call_accepted.ignored", {
-              msgCallId: msg.call_id,
-              activeCallId: call?.callId,
-              role: call?.role,
+        callDebug("callFlow.call_accepted", { callId: msg.call_id, by_user_id: msg.by_user_id });
+        useAppStore.getState().updateActiveCall({ status: "connecting" });
+        let session = getActiveSession();
+        if (!session || session.callId !== call.callId) {
+          session = startSession(call.callId);
+          try {
+            await session.startLocalMedia({ video: call.mediaMode === "video" });
+          } catch (err) {
+            console.error("Local media failed", err);
+            signaling.send({
+              type: "call_end",
+              call_id: call.callId,
+              reason: "caller_local_media_failed_after_accept",
             });
+            endCallLocally("caller_local_media_failed");
             break;
           }
-          callDebug("callFlow.call_accepted", { callId: msg.call_id, by_user_id: msg.by_user_id });
-          useAppStore.getState().updateActiveCall({ status: "connecting" });
-          let session = getActiveSession();
-          if (!session || session.callId !== call.callId) {
-            session = startSession(call.callId);
-            try {
-              await session.startLocalMedia();
-            } catch (err) {
-              console.error("Local media failed", err);
-              signaling.send({
-                type: "call_end",
-                call_id: call.callId,
-                reason: "caller_local_media_failed_after_accept",
-              });
-              endCallLocally("caller_local_media_failed");
-              break;
-            }
-          }
-          await session.createOffer();
         }
+        await session.createOffer();
         break;
+      }
 
       case "call_active":
         callDebug("callFlow.call_active", { callId: msg.call_id, peer_user_id: msg.peer_user_id });
@@ -174,27 +206,29 @@ export function installCallFlow(): () => void {
         await handleIncomingOffer(msg.call_id, msg.sdp);
         break;
 
-      case "answer":
-        {
-          const session = getActiveSession();
-          if (session && session.callId === msg.call_id) {
-            await session.handleRemoteAnswer(msg.sdp);
-          }
+      case "answer": {
+        const session = getActiveSession();
+        if (session && session.callId === msg.call_id) {
+          await session.handleRemoteAnswer(msg.sdp);
         }
         break;
+      }
 
-      case "ice_candidate":
-        {
-          const session = getActiveSession();
-          if (session && session.callId === msg.call_id) {
-            await session.addRemoteIce(msg.candidate);
-          }
+      case "ice_candidate": {
+        const session = getActiveSession();
+        if (session && session.callId === msg.call_id) {
+          await session.addRemoteIce(msg.candidate);
         }
         break;
+      }
 
       case "error":
         callDebugWarn("callFlow.server_error", { message: msg.message, call_id: msg.call_id });
-        if (msg.call_id) endCallLocally(`server_error:${msg.message}`);
+        if (!msg.call_id) {
+          window.alert(msg.message);
+        } else {
+          endCallLocally(`server_error:${msg.message}`);
+        }
         break;
 
       case "pong":
@@ -205,7 +239,7 @@ export function installCallFlow(): () => void {
   const offConn = signaling.onConnection((connected) => {
     callDebug("callFlow.ws.socket", { connected });
     useAppStore.getState().setWsConnected(connected);
-    if (connected) void refreshDirectory();
+    if (connected) void refreshFriendsDirectory();
   });
 
   return () => {
@@ -214,20 +248,28 @@ export function installCallFlow(): () => void {
   };
 }
 
-export async function placeCall(targetUserId: number): Promise<void> {
+export async function placeCall(
+  targetUserId: number,
+  mode: CallMediaMode = "video",
+): Promise<void> {
   if (useAppStore.getState().activeCall) return;
-  callDebug("callFlow.placeCall", { targetUserId });
-  signaling.send({ type: "call_invite", target_user_id: targetUserId });
+  prepareMediaForCall(mode);
+  callDebug("callFlow.placeCall", { targetUserId, mode });
+  signaling.send({ type: "call_invite", target_user_id: targetUserId, media_mode: mode });
 }
 
 export async function acceptIncomingCall(): Promise<void> {
   const incoming = useAppStore.getState().incomingCall;
   if (!incoming) return;
 
-  callDebug("callFlow.acceptIncomingCall", { callId: incoming.callId });
+  prepareMediaForCall(incoming.mediaMode);
+  callDebug("callFlow.acceptIncomingCall", {
+    callId: incoming.callId,
+    mediaMode: incoming.mediaMode,
+  });
   const session = startSession(incoming.callId);
   try {
-    await session.startLocalMedia();
+    await session.startLocalMedia({ video: incoming.mediaMode === "video" });
   } catch (err) {
     callDebugWarn("callFlow.acceptIncomingCall.local_media_failed", { err: String(err) });
     signaling.send({ type: "call_decline", call_id: incoming.callId });
@@ -242,6 +284,7 @@ export async function acceptIncomingCall(): Promise<void> {
     role: "callee",
     status: "connecting",
     startedAt: null,
+    mediaMode: incoming.mediaMode,
   });
   useAppStore.getState().setIncomingCall(null);
 

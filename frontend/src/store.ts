@@ -1,17 +1,18 @@
 import { create } from "zustand";
 import type {
   ActiveCall,
+  FriendsDirectory,
   IncomingCall,
   MediaState,
   OnlineUser,
   PublicUser,
-  UserDirectory,
 } from "./types";
 
-const emptyDirectory = (): UserDirectory => ({
+const emptyFriendsDirectory = (): FriendsDirectory => ({
   online: [],
   offline: [],
   external: [],
+  incoming_requests: [],
   telegram_bot_username: null,
 });
 
@@ -24,7 +25,7 @@ interface AppState {
   wsConnected: boolean;
 
   onlineUsers: OnlineUser[];
-  directory: UserDirectory;
+  friendsDirectory: FriendsDirectory;
 
   incomingCall: IncomingCall | null;
   activeCall: ActiveCall | null;
@@ -41,7 +42,7 @@ interface AppState {
   setWsConnected: (connected: boolean) => void;
 
   setOnlineUsers: (users: OnlineUser[]) => void;
-  setDirectory: (directory: UserDirectory) => void;
+  setFriendsDirectory: (directory: FriendsDirectory) => void;
   upsertOnlineUser: (user: OnlineUser) => void;
   removeOnlineUser: (userId: number) => void;
 
@@ -63,7 +64,7 @@ export const useAppStore = create<AppState>((set) => ({
   wsConnected: false,
 
   onlineUsers: [],
-  directory: emptyDirectory(),
+  friendsDirectory: emptyFriendsDirectory(),
 
   incomingCall: null,
   activeCall: null,
@@ -80,7 +81,7 @@ export const useAppStore = create<AppState>((set) => ({
       jwt: null,
       user: null,
       onlineUsers: [],
-      directory: emptyDirectory(),
+      friendsDirectory: emptyFriendsDirectory(),
       incomingCall: null,
       activeCall: null,
       wsConnected: false,
@@ -89,13 +90,20 @@ export const useAppStore = create<AppState>((set) => ({
   setWsConnected: (wsConnected) => set({ wsConnected }),
 
   setOnlineUsers: (onlineUsers) => set({ onlineUsers }),
-  setDirectory: (directory) =>
+  setFriendsDirectory: (friendsDirectory) =>
     set({
-      directory,
-      onlineUsers: directory.online,
+      friendsDirectory,
+      onlineUsers: friendsDirectory.online,
     }),
   upsertOnlineUser: (user) =>
     set((state) => {
+      const friendIds = new Set([
+        ...state.friendsDirectory.online.map((u) => u.id),
+        ...state.friendsDirectory.offline.map((u) => u.id),
+      ]);
+      if (!friendIds.has(user.id)) {
+        return state;
+      }
       const others = state.onlineUsers.filter((u) => u.id !== user.id);
       return { onlineUsers: [...others, user] };
     }),

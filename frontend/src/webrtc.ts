@@ -224,13 +224,13 @@ export class CallSession {
     }
   }
 
-  async startLocalMedia(): Promise<MediaStream> {
-    callDebug("webrtc.startLocalMedia.begin", { callId: this.callId });
+  async startLocalMedia(options: { video: boolean } = { video: true }): Promise<MediaStream> {
+    callDebug("webrtc.startLocalMedia.begin", { callId: this.callId, video: options.video });
     const { facing } = useAppStore.getState().mediaState;
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: { facingMode: facing },
-    });
+    const constraints: MediaStreamConstraints = options.video
+      ? { audio: true, video: { facingMode: facing } }
+      : { audio: true, video: false };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
     this.localStream = stream;
     useAppStore.getState().setLocalStream(stream);
 
@@ -321,6 +321,7 @@ export class CallSession {
 
   toggleCam(): boolean {
     if (!this.localStream) return false;
+    if (this.localStream.getVideoTracks().length === 0) return false;
     const next = !useAppStore.getState().mediaState.camOn;
     this.localStream.getVideoTracks().forEach((t) => (t.enabled = next));
     useAppStore.getState().setMediaState({ camOn: next });
@@ -328,7 +329,7 @@ export class CallSession {
   }
 
   async switchCamera(): Promise<void> {
-    if (!this.localStream) return;
+    if (!this.localStream || this.localStream.getVideoTracks().length === 0) return;
     const current = useAppStore.getState().mediaState.facing;
     const nextFacing: "user" | "environment" =
       current === "user" ? "environment" : "user";

@@ -116,7 +116,9 @@ export function IncomingCallModal() {
               <div id="incoming-call-title" className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                 {incoming.caller.name}
               </div>
-              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">Входящий видеозвонок…</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">{incoming.mediaMode === "audio"
+                  ? "Входящий аудиозвонок…"
+                  : "Входящий видеозвонок…"}</div>
             </div>
 
             <motion.div

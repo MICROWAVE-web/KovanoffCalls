@@ -60,6 +60,41 @@ class UserDirectoryResponse(BaseModel):
     telegram_bot_username: str | None = None
 
 
+class FriendRequestPublic(BaseModel):
+    id: int
+    from_user: UserPublic
+    created_at: datetime
+
+
+class FriendsDirectoryResponse(BaseModel):
+    online: list[OnlineUser]
+    offline: list[OnlineUser]
+    external: list[ExternalPeer]
+    incoming_requests: list[FriendRequestPublic]
+    telegram_bot_username: str | None = None
+
+
+class FriendRequestCreate(BaseModel):
+    user_id: int
+
+
+class FriendRequestActionResponse(BaseModel):
+    id: int
+    status: str
+    from_user_id: int
+    to_user_id: int
+
+
+class UserSearchResult(UserPublic):
+    relation: str = Field(
+        description="none | friend | pending_out | pending_in",
+    )
+
+
+class UserSearchResponse(BaseModel):
+    results: list[UserSearchResult]
+
+
 class TelegramAuthRequest(BaseModel):
     initData: str
 

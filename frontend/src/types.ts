@@ -20,12 +20,35 @@ export interface ExternalPeer {
   name: string;
 }
 
+export interface FriendRequestItem {
+  id: number;
+  from_user: PublicUser;
+  created_at: string;
+}
+
+export interface FriendsDirectory {
+  online: OnlineUser[];
+  offline: OnlineUser[];
+  external: ExternalPeer[];
+  incoming_requests: FriendRequestItem[];
+  telegram_bot_username: string | null;
+}
+
+/** @deprecated use FriendsDirectory */
 export interface UserDirectory {
   online: OnlineUser[];
   offline: OnlineUser[];
   external: ExternalPeer[];
   telegram_bot_username: string | null;
 }
+
+export type UserRelation = "none" | "friend" | "pending_out" | "pending_in";
+
+export interface UserSearchResult extends PublicUser {
+  relation: UserRelation;
+}
+
+export type CallMediaMode = "audio" | "video";
 
 export type CallStatus = "ringing" | "incoming" | "connecting" | "active" | "ended";
 
@@ -35,11 +58,13 @@ export interface ActiveCall {
   role: "caller" | "callee";
   status: CallStatus;
   startedAt: number | null;
+  mediaMode: CallMediaMode;
 }
 
 export interface IncomingCall {
   callId: string;
   caller: PublicUser;
+  mediaMode: CallMediaMode;
 }
 
 export interface MediaState {
@@ -50,7 +75,7 @@ export interface MediaState {
 
 export type SignalingOutgoing =
   | { type: "ping" }
-  | { type: "call_invite"; target_user_id: number }
+  | { type: "call_invite"; target_user_id: number; media_mode: CallMediaMode }
   | { type: "call_accept"; call_id: string }
   | { type: "call_decline"; call_id: string }
   | { type: "offer"; call_id: string; sdp: RTCSessionDescriptionInit }
@@ -66,11 +91,13 @@ export interface IncomingCallMessage {
   type: "incoming_call";
   call_id: string;
   caller: PublicUser;
+  media_mode?: CallMediaMode;
 }
 export interface CallInvitedMessage {
   type: "call_invited";
   call_id: string;
   target_user_id: number;
+  media_mode?: CallMediaMode;
 }
 export interface CallAcceptedMessage {
   type: "call_accepted";

@@ -2,16 +2,24 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import friends_service
 from app.auth import CurrentUser
 from app.config import get_settings
 from app.db import get_session
 from app.models import User, UserSharedPeer
 from app.redis_presence import get_presence
-from app.schemas import ExternalPeer, OnlineUser, UserDirectoryResponse, UserPublic
+from app.schemas import (
+    ExternalPeer,
+    OnlineUser,
+    UserDirectoryResponse,
+    UserPublic,
+    UserSearchResponse,
+    UserSearchResult,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -104,6 +112,45 @@ async def user_directory(
         external=external,
         telegram_bot_username=bot_u,
     )
+
+
+@router.get("/search", response_model=UserSearchResponse)
+async def search_users(
+    current: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    q: str = Query(min_length=1, max_length=100),
+    limit: int = Query(default=20, ge=1, le=50),
+) -> UserSearchResponse:
+    pattern = f"%{q.strip()}%"
+    stmt = (
+        select(User)
+        .where(
+            User.id != current.id,
+            or_(
+                User.username.ilike(pattern),
+                User.first_name.ilike(pattern),
+                User.last_name.ilike(pattern),
+            ),
+        )
+        .limit(limit)
+    )
+    rows = await session.scalars(stmt)
+    results: list[UserSearchResult] = []
+    for u in rows:
+        relation = await friends_service.get_relation(session, current.id, u.id)
+        results.append(
+            UserSearchResult(
+                id=u.id,
+                telegram_id=u.telegram_id,
+                username=u.username,
+                first_name=u.first_name,
+                last_name=u.last_name,
+                photo_url=u.photo_url,
+                name=u.display_name,
+                relation=relation,
+            )
+        )
+    return UserSearchResponse(results=results)
 
 
 @router.get("/{user_id}", response_model=UserPublic)

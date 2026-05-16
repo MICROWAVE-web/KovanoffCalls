@@ -21,6 +21,28 @@ function useCallTimer(startedAt: number | null): string {
   return formatDuration(elapsed);
 }
 
+function CallAvatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
+  const initials = name
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase())
+    .slice(0, 2)
+    .join("");
+  if (photoUrl) {
+    return (
+      <img
+        src={photoUrl}
+        alt={name}
+        className="h-32 w-32 rounded-full object-cover ring-4 ring-white/20"
+      />
+    );
+  }
+  return (
+    <div className="h-32 w-32 rounded-full bg-brand/30 text-white flex items-center justify-center text-4xl font-semibold ring-4 ring-white/20">
+      {initials || "?"}
+    </div>
+  );
+}
+
 export function CallScreen() {
   const activeCall = useAppStore((s) => s.activeCall);
   const localStream = useAppStore((s) => s.localStream);
@@ -28,6 +50,8 @@ export function CallScreen() {
 
   const localRef = useRef<HTMLVideoElement | null>(null);
   const remoteRef = useRef<HTMLVideoElement | null>(null);
+
+  const isVideo = activeCall?.mediaMode === "video";
 
   useEffect(() => {
     if (!activeCall || activeCall.role !== "caller" || activeCall.status !== "ringing") {
@@ -62,6 +86,19 @@ export function CallScreen() {
         : activeCall.status === "active"
           ? timer
           : "";
+
+  if (!isVideo) {
+    return (
+      <div className="fixed inset-0 z-30 bg-gradient-to-b from-slate-800 to-slate-950 text-white flex flex-col items-center justify-center">
+        <div className="absolute top-0 inset-x-0 pt-6 px-5 flex flex-col items-center pointer-events-none">
+          <CallAvatar name={activeCall.peer.name} photoUrl={activeCall.peer.photo_url} />
+          <div className="text-lg font-medium mt-4 drop-shadow">{activeCall.peer.name}</div>
+          <div className="text-sm mt-1 text-white/80 drop-shadow">{statusLabel}</div>
+        </div>
+        <Controls />
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-30 bg-black text-white">

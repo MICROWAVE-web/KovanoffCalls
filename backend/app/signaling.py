@@ -11,10 +11,11 @@ from jwt import PyJWTError
 from sqlalchemy import select
 
 from app import calls as calls_service
+from app import friends_service
 from app.auth import decode_token
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import Call, CallStatus, User
+from app.models import Call, CallMediaMode, CallStatus, User
 from app.notifications import NotificationPublisher
 from app.redis_presence import get_presence
 from app.schemas import UserPublic
@@ -166,6 +167,7 @@ async def _replay_pending_incoming_for_callee(ws: WebSocket, callee_id: int) -> 
             "type": "incoming_call",
             "call_id": str(call.id),
             "caller": UserPublic.from_model(caller).model_dump(),
+            "media_mode": call.media_mode.value,
         }
     try:
         await ws.send_json(invite_payload)
@@ -187,12 +189,23 @@ async def _handle_call_invite(
         await _send_error(ws, "нельзя позвонить себе")
         return
 
+    raw_mode = payload.get("media_mode", "video")
+    if raw_mode not in ("audio", "video"):
+        await _send_error(ws, "media_mode должен быть audio или video")
+        return
+    media_mode = CallMediaMode.audio if raw_mode == "audio" else CallMediaMode.video
+
     async with SessionLocal() as session:
         target = await session.scalar(select(User).where(User.id == target_user_id))
         if target is None:
             await _send_error(ws, "пользователь не найден")
             return
-        call = await calls_service.create_pending_call(session, user.id, target.id)
+        if not await friends_service.are_friends(session, user.id, target_user_id):
+            await _send_error(ws, "звонить можно только друзьям")
+            return
+        call = await calls_service.create_pending_call(
+            session, user.id, target.id, media_mode=media_mode
+        )
         target_telegram_id = target.telegram_id
 
     sessions.add(user.id, call.id)
@@ -202,11 +215,13 @@ async def _handle_call_invite(
         "type": "incoming_call",
         "call_id": str(call.id),
         "caller": UserPublic.from_model(user).model_dump(),
+        "media_mode": call.media_mode.value,
     }
     ack_payload = {
         "type": "call_invited",
         "call_id": str(call.id),
         "target_user_id": target_user_id,
+        "media_mode": call.media_mode.value,
     }
 
     delivered = await manager.send_to_user(target_user_id, invite_payload)

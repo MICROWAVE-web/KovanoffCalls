@@ -19,6 +19,17 @@ class CallStatus(str, enum.Enum):
     declined = "declined"
 
 
+class CallMediaMode(str, enum.Enum):
+    audio = "audio"
+    video = "video"
+
+
+class FriendRequestStatus(str, enum.Enum):
+    pending = "pending"
+    accepted = "accepted"
+    declined = "declined"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -76,6 +87,32 @@ class UserSharedPeer(Base):
         return f"Telegram #{self.peer_telegram_id}"
 
 
+class FriendRequest(Base):
+    __tablename__ = "friend_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    from_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    to_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[FriendRequestStatus] = mapped_column(
+        Enum(FriendRequestStatus, name="friend_request_status"),
+        nullable=False,
+        default=FriendRequestStatus.pending,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    from_user = relationship("User", foreign_keys=[from_user_id], lazy="joined")
+    to_user = relationship("User", foreign_keys=[to_user_id], lazy="joined")
+
+
 class Call(Base):
     __tablename__ = "calls"
 
@@ -88,6 +125,11 @@ class Call(Base):
     )
     status: Mapped[CallStatus] = mapped_column(
         Enum(CallStatus, name="call_status"), nullable=False, default=CallStatus.pending
+    )
+    media_mode: Mapped[CallMediaMode] = mapped_column(
+        Enum(CallMediaMode, name="call_media_mode"),
+        nullable=False,
+        default=CallMediaMode.video,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
